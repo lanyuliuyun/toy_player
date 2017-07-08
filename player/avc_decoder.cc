@@ -44,7 +44,11 @@ int AvcDecoder::start(void)
 
 void AvcDecoder::stop(void)
 {
-    run_ = false;
+	EnterCriticalSection(&frames_lock_);
+	run_ = false;
+	WakeConditionVariable(&frames_wait_);
+	LeaveCriticalSection(&frames_lock_);
+
     WaitForSingleObject((HANDLE)thread_, INFINITE);
     return;
 }
@@ -65,7 +69,7 @@ void AvcDecoder::decode_routine(void)
         list<Frame*> frames;
         {
             EnterCriticalSection(&frames_lock_);
-            while (frames_to_decode_.empty())
+            while (frames_to_decode_.empty() && run_)
             {
                 SleepConditionVariableCS(&frames_wait_, &frames_lock_, INFINITE);
             }

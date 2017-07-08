@@ -32,24 +32,27 @@ int Render::start(void)
 
 void Render::stop(void)
 {
+	EnterCriticalSection(&images_lock_);
     run_ = false;
-	WaitForSingleObject((HANDLE)thread_, INFINITE);
+	WakeConditionVariable(&images_wait_);
+	LeaveCriticalSection(&images_lock_);
+    WaitForSingleObject((HANDLE)thread_, INFINITE);
     return;
 }
 
 void Render::run(void)
 {
-	for (;;)
-	{
-		SDL_Event event;
-		if (SDL_WaitEventTimeout(&event, 500))
-		{
-			if (event.type == SDL_QUIT)
-			{
-				break;
-			}
-		}
-	}
+    for (;;)
+    {
+        SDL_Event event;
+        if (SDL_WaitEventTimeout(&event, 500))
+        {
+            if (event.type == SDL_QUIT)
+            {
+                break;
+            }
+        }
+    }
 
     return;
 }
@@ -70,7 +73,7 @@ void Render::render_routine(void)
         list<Image*> images;
         {
             EnterCriticalSection(&images_lock_);
-            while (images_to_render_.empty())
+            while (images_to_render_.empty() && run_)
             {
                 SleepConditionVariableCS(&images_wait_, &images_lock_, INFINITE);
             }

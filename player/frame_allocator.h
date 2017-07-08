@@ -25,7 +25,7 @@ public:
     list<Frame*> allocated_frames_;
     list<Frame*> free_frames_;
     CRITICAL_SECTION frames_lock_;
-	int max_frame_len_;
+    int max_frame_len_;
 };
 
 class Frame

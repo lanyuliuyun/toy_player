@@ -39,7 +39,7 @@ int AvcFrameGenerator::start()
 void AvcFrameGenerator::stop()
 {
     run_ = false;
-	WaitForSingleObject((HANDLE)thread_, INFINITE);
+    WaitForSingleObject((HANDLE)thread_, INFINITE);
     return;
 }
 
@@ -63,7 +63,7 @@ void AvcFrameGenerator::thread_routine(void)
     {
         fill_image_i420(image_, image_index_);
         avc_encoder_encode(encoder_, image_, image_index_, 0);
-		image_index_++;
+        image_index_++;
         Sleep(33);
     }
 

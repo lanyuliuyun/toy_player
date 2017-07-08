@@ -46,7 +46,7 @@ class Image
         allocator->free(this);
     }
 
-	ImageAllocator* allocator;
+    ImageAllocator* allocator;
     i420_image_t *image;
 };
 

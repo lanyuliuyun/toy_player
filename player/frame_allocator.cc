@@ -3,7 +3,7 @@
 
 FrameAllocator::FrameAllocator(int count, int max_frame_len)
 {
-	max_frame_len_ = max_frame_len;
+    max_frame_len_ = max_frame_len;
     init(count, max_frame_len);
     InitializeCriticalSectionAndSpinCount(&frames_lock_, 3000);
 }

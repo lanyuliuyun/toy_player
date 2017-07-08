@@ -15,7 +15,7 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
-	avcodec_register_all();
+    avcodec_register_all();
 
     ImageAllocator image_allocator(30, 640, 480);
     FrameAllocator frame_allocator(30, 51200);
