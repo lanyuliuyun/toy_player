@@ -1,0 +1,4 @@
+Debug/
+*.VC.*
+player/Debug/
+.vs/
