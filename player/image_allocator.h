@@ -2,7 +2,24 @@
 #ifndef IMAGE_ALLOCATOR_H
 #define IMAGE_ALLOCATOR_H
 
-#include "encode.h"
+typedef struct nv12_image
+{
+    int width;
+    int height;
+    unsigned char* data;
+    int size;
+    unsigned char* y_ptr;
+    int y_stride;
+    unsigned char* uv_ptr;
+    int uv_stride;
+}nv12_image_t;
+
+extern "C" {
+  nv12_image_t* nv12_image_alloc(int width, int height);
+  void nv12_image_free(nv12_image_t* image);
+  void fill_nv12_image(nv12_image_t* image, int index);
+}
+
 #include <Windows.h>
 
 #include <list>
@@ -33,12 +50,12 @@ class Image
   public:
     Image(ImageAllocator* allocator, int w, int h) : allocator(allocator)
     {
-        image = i420_image_alloc(w, h);
+        image = nv12_image_alloc(w, h);
     }
 
     ~Image()
     {
-        i420_image_free(image);
+        nv12_image_free(image);
     }
 
     void release(void)
@@ -47,7 +64,7 @@ class Image
     }
 
     ImageAllocator* allocator;
-    i420_image_t *image;
+    nv12_image_t *image;
 };
 
 #endif // !IMAGE_ALLOCATOR_H

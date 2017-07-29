@@ -1,28 +1,27 @@
 
 #include "image_allocator.h"
-#include "frame_allocator.h"
 
-#include "render.h"
-#include "avc_decoder.h"
-#include "avc_frame_generator.h"
+#include "render_d2d.h"
+#include "avc_decoder_mf.h"
+#include "avc_frame_generator_mf.h"
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-}
+#include <mfapi.h>
 
 #include <functional>
 using namespace std;
 
 int main(int argc, char *argv[])
 {
-    avcodec_register_all();
+	CoInitialize(NULL);
+	MFStartup(MF_VERSION, 0);
+    
+    Render::d2d_init();
 
-    ImageAllocator image_allocator(30, 640, 480);
-    FrameAllocator frame_allocator(30, 51200);
+    ImageAllocator image_allocator(10, 640, 480);
 
-    Render render;
+    Render render(640, 480);
     AvcDecoder avc_decoder(&image_allocator, bind(&Render::submit, &render, placeholders::_1));
-    AvcFrameGenerator avc_generator(&frame_allocator, bind(&AvcDecoder::submit, &avc_decoder, placeholders::_1));
+    AvcFrameGenerator avc_generator(640, 480, bind(&AvcDecoder::submit, &avc_decoder, placeholders::_1));
 
     render.start();
     avc_decoder.start();
@@ -33,6 +32,11 @@ int main(int argc, char *argv[])
     avc_generator.stop();
     avc_decoder.stop();
     render.stop();
+    
+    Render::d2d_uninit();
+
+	MFShutdown();
+	CoUninitialize();
 
     return 0;
 }
