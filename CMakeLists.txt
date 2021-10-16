@@ -21,6 +21,7 @@ if (MSVC)
     add_compile_options(
         /utf-8
         /wd4996
+        /DWIN32_LEAN_AND_MEAN
     )
 endif()
 

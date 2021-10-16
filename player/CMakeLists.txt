@@ -41,6 +41,20 @@ target_link_libraries(ut_avc_decoder
     Mfuuid.lib
 )
 
+set(ut_audio_cap_source_mf_SRCS
+    audio_cap_source_mf.cc
+)
+add_executable(ut_audio_cap_source_mf ${ut_audio_cap_source_mf_SRCS})
+target_compile_definitions(ut_audio_cap_source_mf
+    PRIVATE AUDIO_CAP_SOURCE_UT
+)
+target_link_libraries(ut_audio_cap_source_mf
+    Mf.lib
+    Mfplat.lib
+    Mfuuid.lib
+    Mfreadwrite.lib
+)
+
 set(toy_player_SRCS
     avc_decoder_mf.cc
     avc_frame_generator_mf.cc
