@@ -566,7 +566,6 @@ void on_img(Image* image)
 
 int wmain(int argc, wchar_t *argv[])
 {
-    char frame_buffer[640*48];
     int frame_buffer_len = 640 * 48;
     int frame_size = 0;
 

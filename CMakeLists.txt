@@ -20,6 +20,7 @@ link_directories(
 if (MSVC)
     add_compile_options(
         /utf-8
+        /wd4996
     )
 endif()
 
