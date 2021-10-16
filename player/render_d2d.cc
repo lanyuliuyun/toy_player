@@ -137,7 +137,7 @@ int Render::init(void)
         wndclsex.hInstance, 
         this);
 
-	SetWindowLong(hwnd_, GWL_USERDATA, (LONG)this);
+	SetWindowLongPtrW(hwnd_, GWLP_USERDATA, (LONG_PTR)this);
 
 	ShowWindow(hwnd_, SW_SHOWNORMAL);
 	UpdateWindow(hwnd_);
@@ -204,7 +204,7 @@ void Render::onRender(void)
         &bitmap_property, 
         &d2d_bitmap);
 
-	D2D1_RECT_F dst_rect = { 0, 0, image->image->width, image->image->height };
+	D2D1_RECT_F dst_rect = { 0, 0, (float)image->image->width, (float)image->image->height };
     render_target_->BeginDraw();
     render_target_->DrawBitmap(d2d_bitmap, dst_rect);
     render_target_->EndDraw();
@@ -219,7 +219,7 @@ LRESULT CALLBACK Render::wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
     {
         case WM_PAINT:
         {
-            Render* thiz = (Render*)GetWindowLong(hWnd, GWL_USERDATA);
+            Render* thiz = (Render*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
             thiz->onRender();
             break;
         }
@@ -240,9 +240,9 @@ LRESULT CALLBACK Render::wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 
 #ifdef UT_D2D_RENDER
 
-int main(int argc, char *argv)
+int wmain(int argc, wchar_t *argv)
 {
-	CoInitialize(NULL);
+	CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
 	Render::d2d_init();
 

@@ -2,8 +2,8 @@
 #ifndef RENDER_D2D_H
 #define RENDER_D2D_H
 
-#include <d2d1.h>
 #include <Windows.h>
+#include <d2d1.h>
 
 #include <list>
 using std::list;

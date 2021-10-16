@@ -564,7 +564,7 @@ void on_img(Image* image)
     return;
 }
 
-int main(int argc, char *argv[])
+int wmain(int argc, wchar_t *argv[])
 {
     char frame_buffer[640*48];
     int frame_buffer_len = 640 * 48;

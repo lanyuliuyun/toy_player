@@ -506,7 +506,7 @@ void on_frame(Frame* frame)
     return;
 }
 
-int main(int argc, char *argv[])
+int wmain(int argc, wchar_t *argv[])
 {
 	MFStartup(MF_VERSION, 0);
 
@@ -518,7 +518,7 @@ int main(int argc, char *argv[])
     AvcFrameGenerator avc_generator(640, 480, frame_sink);
     avc_generator.start();
     
-    Sleep(30000);
+    Sleep(3000);
 
     avc_generator.stop();
     fclose(frame_fp);

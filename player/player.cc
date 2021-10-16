@@ -10,7 +10,7 @@
 #include <functional>
 using namespace std;
 
-int main(int argc, char *argv[])
+int wmain(int argc, wchar_t *argv[])
 {
 	CoInitialize(NULL);
 	MFStartup(MF_VERSION, 0);
