@@ -1,4 +1,9 @@
 Debug/
+Release/
 *.VC.*
 player/Debug/
 .vs/
+.vscode/
+bak/
+*.h264
+*.nv12

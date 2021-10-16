@@ -14,530 +14,532 @@
 AvcDecoder::AvcDecoder(ImageAllocator* allocator, ImageSink image_sink)
     : allocator_(allocator)
     , image_sink_(image_sink)
-	, video_decoder_(NULL)
-	, got_first_idr_frame_(false)
-	, es_stream_width_(-1)
-	, es_stream_height_(-1)
+    , video_decoder_(NULL)
+    , got_first_idr_frame_(false)
+    , es_stream_width_(-1)
+    , es_stream_height_(-1)
 {
-	init();
+    init();
 
-	/* FIXME: ´ËÊ±ÔİÏÈ½«¿í¸ßÄ¬ÈÏÎª 640x480 */
-	es_stream_width_ = 640;
-	es_stream_height_ = 480;
+    /* FIXME: æ­¤æ—¶æš‚å…ˆå°†å®½é«˜é»˜è®¤ä¸º 640x480 */
+    es_stream_width_ = 640;
+    es_stream_height_ = 480;
 
-	return;
+    return;
 }
 
 AvcDecoder::~AvcDecoder()
 {
-	if (NULL != video_decoder_)
-	{
-		video_decoder_->Release();
-	}
+    if (NULL != video_decoder_)
+    {
+        video_decoder_->Release();
+    }
 
-	DeleteCriticalSection(&frames_lock_);
+    DeleteCriticalSection(&frames_lock_);
 
-	return;
+    return;
 }
 
 int AvcDecoder::start(void)
 {
-	run_ = true;
-	thread_ = _beginthreadex(NULL, 0, AvcDecoder::thread_entry, this, 0, NULL);
+    run_ = true;
+    thread_ = _beginthreadex(NULL, 0, AvcDecoder::thread_entry, this, 0, NULL);
 
-	return 0;
+    return 0;
 }
 
 void AvcDecoder::stop(void)
 {
-	EnterCriticalSection(&frames_lock_);
-	run_ = false;
-	WakeConditionVariable(&frames_wait_);
-	LeaveCriticalSection(&frames_lock_);
+    EnterCriticalSection(&frames_lock_);
+    run_ = false;
+    WakeConditionVariable(&frames_wait_);
+    LeaveCriticalSection(&frames_lock_);
 
-	WaitForSingleObject((HANDLE)thread_, INFINITE);
-	return;
+    WaitForSingleObject((HANDLE)thread_, INFINITE);
+    return;
 }
 
 void AvcDecoder::submit(Frame* frame)
 {
-	EnterCriticalSection(&frames_lock_);
-	frames_to_decode_.push_back(frame);
-	WakeConditionVariable(&frames_wait_);
-	LeaveCriticalSection(&frames_lock_);
-	return;
+    EnterCriticalSection(&frames_lock_);
+    frames_to_decode_.push_back(frame);
+    WakeConditionVariable(&frames_wait_);
+    LeaveCriticalSection(&frames_lock_);
+    return;
 }
 
 void AvcDecoder::decode_routine(void)
 {
-	video_decoder_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+    video_decoder_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
 
-	list<Frame*> frames;
+    list<Frame*> frames;
 
-	while (run_)
-	{
-		{
-			EnterCriticalSection(&frames_lock_);
-			while (frames_to_decode_.empty() && run_)
-			{
-				SleepConditionVariableCS(&frames_wait_, &frames_lock_, INFINITE);
-			}
-			frames_to_decode_.swap(frames);
-			LeaveCriticalSection(&frames_lock_);
-		}
+    while (run_)
+    {
+        {
+            EnterCriticalSection(&frames_lock_);
+            while (frames_to_decode_.empty() && run_)
+            {
+                SleepConditionVariableCS(&frames_wait_, &frames_lock_, INFINITE);
+            }
+            frames_to_decode_.swap(frames);
+            LeaveCriticalSection(&frames_lock_);
+        }
 
-		list<Frame*>::iterator iter = frames.begin();
-		list<Frame*>::iterator iter_end = frames.end();
-		for (; iter != iter_end; ++iter)
-		{
-			Frame* frame = *iter;
-			if (decode(frame) == 0)
-			{
-				frame->release();
-			}
-			else
-			{
-				EnterCriticalSection(&frames_lock_);
-				iter_end--;
-				for (; iter_end != iter; iter_end--)
-				{
-					frames_to_decode_.push_front(*iter_end);
-				}
-				frames_to_decode_.push_front(*iter);
-				LeaveCriticalSection(&frames_lock_);
+        list<Frame*>::iterator iter = frames.begin();
+        list<Frame*>::iterator iter_end = frames.end();
+        for (; iter != iter_end; ++iter)
+        {
+            Frame* frame = *iter;
+            if (decode(frame) == 0)
+            {
+                frame->release();
+            }
+            else
+            {
+                EnterCriticalSection(&frames_lock_);
+                iter_end--;
+                for (; iter_end != iter; iter_end--)
+                {
+                    frames_to_decode_.push_front(*iter_end);
+                }
+                frames_to_decode_.push_front(*iter);
+                LeaveCriticalSection(&frames_lock_);
 
-				break;
-			}
-		}
-		frames.clear();
-	}
+                break;
+            }
+        }
+        frames.clear();
+    }
 
-	{
-		EnterCriticalSection(&frames_lock_);
-		frames_to_decode_.swap(frames);
-		LeaveCriticalSection(&frames_lock_);
+    {
+        EnterCriticalSection(&frames_lock_);
+        frames_to_decode_.swap(frames);
+        LeaveCriticalSection(&frames_lock_);
 
-		list<Frame*>::iterator iter = frames.begin();
-		list<Frame*>::iterator iter_end = frames.end();
+        list<Frame*>::iterator iter = frames.begin();
+        list<Frame*>::iterator iter_end = frames.end();
 
-		for (; iter != iter_end; ++iter)
-		{
-			Frame* frame = *iter;
-			decode(frame);
-			frame->release();
-		}
-	}
+        for (; iter != iter_end; ++iter)
+        {
+            Frame* frame = *iter;
+            decode(frame);
+            frame->release();
+        }
+    }
 
-	video_decoder_->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, input_stream_id_);
+    video_decoder_->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, input_stream_id_);
 
-	video_decoder_->Release();
-	video_decoder_ = NULL;
+    video_decoder_->Release();
+    video_decoder_ = NULL;
 
-	return;
+    return;
 }
 
 int AvcDecoder::init(void)
 {
-	InitializeCriticalSectionAndSpinCount(&frames_lock_, 3000);
-	InitializeConditionVariable(&frames_wait_);
+    InitializeCriticalSectionAndSpinCount(&frames_lock_, 3000);
+    InitializeConditionVariable(&frames_wait_);
 
-	int ret = -1;
-	HRESULT result;
+    int ret = -1;
+    HRESULT result;
 
-	MFT_REGISTER_TYPE_INFO input_info;
-	memset(&input_info, 0, sizeof(input_info));
-	input_info.guidMajorType = MFMediaType_Video;
-	input_info.guidSubtype = MFVideoFormat_H264;
+    MFT_REGISTER_TYPE_INFO input_info;
+    memset(&input_info, 0, sizeof(input_info));
+    input_info.guidMajorType = MFMediaType_Video;
+    input_info.guidSubtype = MFVideoFormat_H264;
 
-	MFT_REGISTER_TYPE_INFO output_info;
-	memset(&output_info, 0, sizeof(output_info));
-	output_info.guidMajorType = MFMediaType_Video;
-	//output_info.guidSubtype = MFVideoFormat_I420;
-	output_info.guidSubtype = MFVideoFormat_NV12;
+    MFT_REGISTER_TYPE_INFO output_info;
+    memset(&output_info, 0, sizeof(output_info));
+    output_info.guidMajorType = MFMediaType_Video;
+    //output_info.guidSubtype = MFVideoFormat_I420;
+    output_info.guidSubtype = MFVideoFormat_NV12;
 
-	IMFActivate **mft_activates = NULL;
-	UINT32 mft_actives_count = 0;
-	result = MFTEnumEx(MFT_CATEGORY_VIDEO_DECODER, 0, &input_info, &output_info, &mft_activates, &mft_actives_count);
-	if (result == S_OK && mft_actives_count > 0)
-	{
-		printf("%u decoder actives was returned\n", mft_actives_count);
+    IMFActivate **mft_activates = NULL;
+    UINT32 mft_actives_count = 0;
+    result = MFTEnumEx(MFT_CATEGORY_VIDEO_DECODER, 0, &input_info, &output_info, &mft_activates, &mft_actives_count);
+    if (result == S_OK && mft_actives_count > 0)
+    {
+        printf("%u decoder actives was returned\n", mft_actives_count);
 
-		do
-		{
-			IMFTransform *video_decoder = NULL;
-			result = mft_activates[0]->ActivateObject(IID_PPV_ARGS(&video_decoder));
+        do
+        {
+            IMFTransform *video_decoder = NULL;
+            result = mft_activates[0]->ActivateObject(IID_PPV_ARGS(&video_decoder));
 
-			DWORD input_min;
-			DWORD input_max;
-			DWORD output_min;
-			DWORD output_max;
+            DWORD input_min;
+            DWORD input_max;
+            DWORD output_min;
+            DWORD output_max;
 
-			DWORD input_stream_count;
-			DWORD output_stream_count;
+            DWORD input_stream_count;
+            DWORD output_stream_count;
 
-			video_decoder->GetStreamLimits(&input_min, &input_max, &output_min, &output_max);
-			video_decoder->GetStreamCount(&input_stream_count, &output_stream_count);
-			printf("decoder, input: %u-%u, output: %u-%u, input_stream_count: %u, output_stream_count: %u\n", 
-					input_min, input_max, output_min, output_max, input_stream_count, output_stream_count);
+            video_decoder->GetStreamLimits(&input_min, &input_max, &output_min, &output_max);
+            video_decoder->GetStreamCount(&input_stream_count, &output_stream_count);
+            printf("decoder, input: %u-%u, output: %u-%u, input_stream_count: %u, output_stream_count: %u\n", 
+                    input_min, input_max, output_min, output_max, input_stream_count, output_stream_count);
 
-			/* ¶ÔÓÚ video_decoder ÊÇÒÑÖªinput/output stream ¸÷Ö»ÓĞÒ»¸ö */
+            /* å¯¹äº video_decoder æ˜¯å·²çŸ¥input/output stream å„åªæœ‰ä¸€ä¸ª */
 
-			DWORD input_stream_id;
-			DWORD output_stream_id;
-			result = video_decoder->GetStreamIDs(1, &input_stream_id, 1, &output_stream_id);
-			if (result != S_OK && result != E_NOTIMPL)
-			{
-				printf("failed to get stream id\n");
-				break;
-			}
-			if (result == E_NOTIMPL)
-			{
-				input_stream_id = 0;
-				output_stream_id = 0;
-			}
+            DWORD input_stream_id;
+            DWORD output_stream_id;
+            result = video_decoder->GetStreamIDs(1, &input_stream_id, 1, &output_stream_id);
+            if (result != S_OK && result != E_NOTIMPL)
+            {
+                printf("failed to get stream id\n");
+                break;
+            }
+            if (result == E_NOTIMPL)
+            {
+                input_stream_id = 0;
+                output_stream_id = 0;
+            }
 
-			IMFMediaType* input_media_type = NULL;
-			video_decoder->GetInputAvailableType(input_stream_id, 0, &input_media_type);
-			result = video_decoder->SetInputType(input_stream_id, input_media_type, 0);
-			if (result != S_OK)
-			{
-				printf("failed to set input type\n");
-				break;
-			}
+            IMFMediaType* input_media_type = NULL;
+            video_decoder->GetInputAvailableType(input_stream_id, 0, &input_media_type);
+            result = video_decoder->SetInputType(input_stream_id, input_media_type, 0);
+            if (result != S_OK)
+            {
+                printf("failed to set input type\n");
+                break;
+            }
 
-			IMFMediaType* output_media_type = NULL;
-			video_decoder->GetOutputAvailableType(output_stream_id, 0, &output_media_type);
-			video_decoder->SetOutputType(output_stream_id, output_media_type, 0);
-			if (result != S_OK)
-			{
-				printf("failed to set output type\n");
-				break;
-			}
+            IMFMediaType* output_media_type = NULL;
+            video_decoder->GetOutputAvailableType(output_stream_id, 0, &output_media_type);
+            video_decoder->SetOutputType(output_stream_id, output_media_type, 0);
+            if (result != S_OK)
+            {
+                printf("failed to set output type\n");
+                break;
+            }
 
-			MFT_INPUT_STREAM_INFO input_stream_info;
-			memset(&input_stream_info, 0, sizeof(input_stream_info));
-			video_decoder->GetInputStreamInfo(input_stream_id, &input_stream_info);
+            MFT_INPUT_STREAM_INFO input_stream_info;
+            memset(&input_stream_info, 0, sizeof(input_stream_info));
+            video_decoder->GetInputStreamInfo(input_stream_id, &input_stream_info);
 
-			MFT_OUTPUT_STREAM_INFO output_stream_info;
-			memset(&output_stream_info, 0, sizeof(output_stream_info));
-			video_decoder->GetOutputStreamInfo(output_stream_id, &output_stream_info);
+            MFT_OUTPUT_STREAM_INFO output_stream_info;
+            memset(&output_stream_info, 0, sizeof(output_stream_info));
+            video_decoder->GetOutputStreamInfo(output_stream_id, &output_stream_info);
 
-			/*
-			Input Stream: MaxLatency: 0, Flags: 0x7, Size: 4096, MaxLookahead: 0, Alignment: 0
-			Output Stream: Flags: 0x0, Size: 0, Alignment: 0
-			*/
+            /*
+            Input Stream: MaxLatency: 0, Flags: 0x7, Size: 4096, MaxLookahead: 0, Alignment: 0
+            Output Stream: Flags: 0x0, Size: 0, Alignment: 0
+            */
 
-			printf("Input Stream: MaxLatency: %lld, Flags: 0x%x, Size: %u, MaxLookahead: %u, Alignment: %u\n"
-				"Output Stream: Flags: 0x%x, Size: %u, Alignment: %u\n",
-				input_stream_info.hnsMaxLatency, input_stream_info.dwFlags, input_stream_info.cbSize, input_stream_info.cbMaxLookahead, input_stream_info.cbAlignment,
-				output_stream_info.dwFlags, output_stream_info.cbSize, output_stream_info.cbAlignment);
+            printf("Input Stream: MaxLatency: %lld, Flags: 0x%x, Size: %u, MaxLookahead: %u, Alignment: %u\n"
+                "Output Stream: Flags: 0x%x, Size: %u, Alignment: %u\n",
+                input_stream_info.hnsMaxLatency, input_stream_info.dwFlags, input_stream_info.cbSize, input_stream_info.cbMaxLookahead, input_stream_info.cbAlignment,
+                output_stream_info.dwFlags, output_stream_info.cbSize, output_stream_info.cbAlignment);
 
-			mft_hold_input_buffer_ = (input_stream_info.dwFlags & MFT_INPUT_STREAM_DOES_NOT_ADDREF) == 0;
-			need_client_allocate_output_buffer_ = (output_stream_info.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) == 0;
+            mft_hold_input_buffer_ = (input_stream_info.dwFlags & MFT_INPUT_STREAM_DOES_NOT_ADDREF) == 0;
+            need_client_allocate_output_buffer_ = (output_stream_info.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) == 0;
 
-			puts("setup video decoder OK");
+            puts("setup video decoder OK");
 
-			input_buffer_alignment_ = input_stream_info.cbAlignment;
-			output_buffer_alignment_ = output_stream_info.cbAlignment;
+            input_buffer_alignment_ = input_stream_info.cbAlignment;
+            output_buffer_alignment_ = output_stream_info.cbAlignment;
 
-			video_decoder_ = video_decoder;
-			input_stream_id_ = input_stream_id;
-			output_stream_id_ = output_stream_id;
+            video_decoder_ = video_decoder;
+            input_stream_id_ = input_stream_id;
+            output_stream_id_ = output_stream_id;
 
-			ret = 0;
-		} while (0);
+            ret = 0;
+        } while (0);
 
-		for (UINT32 i = 0; i < mft_actives_count; ++i)
-		{
-			mft_activates[i]->Release();
-		}
-		CoTaskMemFree(mft_activates);
-	}
+        for (UINT32 i = 0; i < mft_actives_count; ++i)
+        {
+            mft_activates[i]->Release();
+        }
+        CoTaskMemFree(mft_activates);
+    }
 
-	return ret;
+    return ret;
 }
 
 static
 void analyze_sps(const uint8_t *nalu, size_t nalu_size, int* width, int* height)
 {
-	// TODO: ´ÓSPSÖĞ·ÖÎö³ö¿í¸ß
-	return;
+    // TODO: ä»SPSä¸­åˆ†æå‡ºå®½é«˜
+    return;
 }
 
 enum {
-	H264_NALU_TYPE_NONIDR = 1,
-	H264_NALU_TYPE_IDR = 5,
-	H264_NALU_TYPE_SPS = 7,
-	H264_NALU_TYPE_PPS = 8,
+    H264_NALU_TYPE_NONIDR = 1,
+    H264_NALU_TYPE_IDR = 5,
+    H264_NALU_TYPE_SPS = 7,
+    H264_NALU_TYPE_PPS = 8,
 };
 
 int AvcDecoder::check_frame(uint8_t* frame, int frame_len)
 {
-	/* TODO:
-	 * 1, ¼ì²éÊÇ·ñÒÑ¾­»ñÈ¡µ½SPS/PPS£»ÈôÃ»ÓĞ²¢ÇÒµ±Ç°²»ÊÇIDRÖ¡£¬Ôò¶ªÆúÖ®
-	 * 2£¬ÈôÊÇIDRÖ¡£¬·ÖÎöSPSÖĞ¼ÇÂ¼µÄ¿í¸ß
-	 */
+    /* TODO:
+     * 1, æ£€æŸ¥æ˜¯å¦å·²ç»è·å–åˆ°SPS/PPSï¼›è‹¥æ²¡æœ‰å¹¶ä¸”å½“å‰ä¸æ˜¯IDRå¸§ï¼Œåˆ™ä¸¢å¼ƒä¹‹
+     * 2ï¼Œè‹¥æ˜¯IDRå¸§ï¼Œåˆ†æSPSä¸­è®°å½•çš„å®½é«˜
+     */
 
-	const uint8_t *byte;
-	uint32_t next4bytes;
-	const uint8_t *nalu1_begin;
-	const uint8_t *nalu2_begin;
-	uint8_t nalu_type;
+    const uint8_t *byte;
+    uint32_t next4bytes;
+    const uint8_t *nalu1_begin;
+    const uint8_t *nalu2_begin;
+    uint8_t nalu_type;
 
-	bool first_nalu = true;
-	bool got_sps_nalu = false;
-	bool got_pps_nalu = false;
-	int es_width = 0;
-	int es_height = 0;
+    bool first_nalu = true;
+    bool got_sps_nalu = false;
+    bool got_pps_nalu = false;
+    int es_width = 0;
+    int es_height = 0;
 
-	/* H264°×Æ¤Êé B.1.2 ½Ú¶Ô NALU ÓïÒå½á¹¹ËµÃ÷ÈçÏÂ
-	 *
-	 * leading_zero_8bits: 0x00 µ± NALU Îª×Ö½ÚÁ÷µÄµÚÒ»¸ö NALU Ê±°üº¬
-	 * zero_byte: 0x00 µ± NALU Îª SPS/PPS, »òÎª Access Unit µÄµÚÒ»¸ö NALU Ê±°üº¬
-	 * start_code_prefix_one_3bytes: 0x000001, NALU ÆğÊ¼ÂëÇ°×º
-	 *  < ¾ßÌåµÄ NALU Êı¾İ >
-	 * trailing_zero_8bits: 0x00
-	 *
-	 * ×ÛÉÏÊöÌõ¼ş£¬¿ÉÒÔ¿´³ö¾ßÌåµÄ NALU Êı¾İÊÇ±» 0x00000001 Ëù·Ö¸îµÄ£¬»ò¶îÍâ°üº¬ 0 ×Ö½Ú
-	 * ÏÂÊö·Ö¸î¹ı³Ì¼ÈÊÇ»ùÓÚÉÏÊö½á¹¹À´½øĞĞµÄ
-	 */
+    /* H264ç™½çš®ä¹¦ B.1.2 èŠ‚å¯¹ NALU è¯­ä¹‰ç»“æ„è¯´æ˜å¦‚ä¸‹
+     *
+     * leading_zero_8bits: 0x00 å½“ NALU ä¸ºå­—èŠ‚æµçš„ç¬¬ä¸€ä¸ª NALU æ—¶åŒ…å«
+     * zero_byte: 0x00 å½“ NALU ä¸º SPS/PPS, æˆ–ä¸º Access Unit çš„ç¬¬ä¸€ä¸ª NALU æ—¶åŒ…å«
+     * start_code_prefix_one_3bytes: 0x000001, NALU èµ·å§‹ç å‰ç¼€
+     *  < å…·ä½“çš„ NALU æ•°æ® >
+     * trailing_zero_8bits: 0x00
+     *
+     * ç»¼ä¸Šè¿°æ¡ä»¶ï¼Œå¯ä»¥çœ‹å‡ºå…·ä½“çš„ NALU æ•°æ®æ˜¯è¢« 0x00000001 æ‰€åˆ†å‰²çš„ï¼Œæˆ–é¢å¤–åŒ…å« 0 å­—èŠ‚
+     * ä¸‹è¿°åˆ†å‰²è¿‡ç¨‹æ—¢æ˜¯åŸºäºä¸Šè¿°ç»“æ„æ¥è¿›è¡Œçš„
+     */
 
-	byte = frame;
-	while ((byte + 4) < (frame + frame_len))
-	{
-		next4bytes = ((uint32_t)byte[0] << 24) | ((uint32_t)byte[1] << 16) | ((uint32_t)byte[2] << 8) | (uint32_t)byte[3];
+    byte = frame;
+    while ((byte + 4) < (frame + frame_len))
+    {
+        next4bytes = ((uint32_t)byte[0] << 24) | ((uint32_t)byte[1] << 16) | ((uint32_t)byte[2] << 8) | (uint32_t)byte[3];
 
-		if (next4bytes != 0x00000001)
-		{
-			byte++;
-			continue;
-		}
+        if (next4bytes != 0x00000001)
+        {
+            byte++;
+            continue;
+        }
 
-		/* Ìø¹ı×ÔÉíµÄ start_code_prefix_one_3bytes£¬ÒÔ¼° leading_zero_8bits »òÇ°Ò»¸ö NALU µÄ trailing_zero_8bits */
-		nalu1_begin = byte + 4;
+        /* è·³è¿‡è‡ªèº«çš„ start_code_prefix_one_3bytesï¼Œä»¥åŠ leading_zero_8bits æˆ–å‰ä¸€ä¸ª NALU çš„ trailing_zero_8bits */
+        nalu1_begin = byte + 4;
 
-		nalu2_begin = nalu1_begin + 1;		/* Ìø¹ınalu_type×Ö½Ú */
-		while ((nalu2_begin + 4) < (frame + frame_len))
-		{
-			next4bytes = ((uint32_t)nalu2_begin[0] << 24) | ((uint32_t)nalu2_begin[1] << 16) | ((uint32_t)nalu2_begin[2] << 8) | (uint32_t)nalu2_begin[3];
-			if (next4bytes == 0x00000001)
-			{
-				break;
-			}
+        nalu2_begin = nalu1_begin + 1;        /* è·³è¿‡nalu_typeå­—èŠ‚ */
+        while ((nalu2_begin + 4) < (frame + frame_len))
+        {
+            next4bytes = ((uint32_t)nalu2_begin[0] << 24) | ((uint32_t)nalu2_begin[1] << 16) | ((uint32_t)nalu2_begin[2] << 8) | (uint32_t)nalu2_begin[3];
+            if (next4bytes == 0x00000001)
+            {
+                break;
+            }
 
-			nalu2_begin++;
-		}
-	
-		nalu_type = nalu1_begin[0];
-		if (nalu_type == H264_NALU_TYPE_SPS)
-		{
-			got_sps_nalu = 1;
-			analyze_sps(nalu1_begin, (nalu2_begin - nalu1_begin), &es_width, &es_height);
-		}
-		else if (nalu_type == H264_NALU_TYPE_PPS)
-		{
-			got_pps_nalu = 1;
-		}
+            nalu2_begin++;
+        }
+    
+        nalu_type = nalu1_begin[0];
+        if (nalu_type == H264_NALU_TYPE_SPS)
+        {
+            got_sps_nalu = 1;
+            analyze_sps(nalu1_begin, (nalu2_begin - nalu1_begin), &es_width, &es_height);
+        }
+        else if (nalu_type == H264_NALU_TYPE_PPS)
+        {
+            got_pps_nalu = 1;
+        }
 
-		if (!got_first_idr_frame_)
-		{
-			if (got_sps_nalu && got_pps_nalu)
-			{
-				got_first_idr_frame_ = true;
-				break;
-			}
-		}
+        if (!got_first_idr_frame_)
+        {
+            if (got_sps_nalu && got_pps_nalu)
+            {
+                got_first_idr_frame_ = true;
+                break;
+            }
+        }
 
-		if ((nalu2_begin + 4) == (frame + frame_len))
-		{
-			/* nalu1_begin Ö¸ÏòµÄ NALU ÒÑ¾­ÊÇµ±Ç°Ö¡ÖĞµÄ×îºóÒ»¸ö NALU */
-			break;
-		}
-		else /* if ((nalu2_begin + 4) < (frame + frame_len)) */
-		{
-			byte = nalu2_begin;
-		}
-	}
+        if ((nalu2_begin + 4) == (frame + frame_len))
+        {
+            /* nalu1_begin æŒ‡å‘çš„ NALU å·²ç»æ˜¯å½“å‰å¸§ä¸­çš„æœ€åä¸€ä¸ª NALU */
+            break;
+        }
+        else /* if ((nalu2_begin + 4) < (frame + frame_len)) */
+        {
+            byte = nalu2_begin;
+        }
+    }
 
-	if (!got_first_idr_frame_)
-	{
-		printf("No IDR frame arrived yet, drop frame\n");
-		return -1;
-	}
+    if (!got_first_idr_frame_)
+    {
+        printf("No IDR frame arrived yet, drop frame\n");
+        return -1;
+    }
 
-	if ((es_width > 0 && es_height > 0) &&
-		(es_stream_width_ != es_width || es_stream_width_ != es_height))
-	{
-		// NOTE: ÂëÁ÷·¢Éú±ä»¯£¬ÖØĞÂ·ÖÅäoutput buffer ?
+    if ((es_width > 0 && es_height > 0) &&
+        (es_stream_width_ != es_width || es_stream_width_ != es_height))
+    {
+        // NOTE: ç æµå‘ç”Ÿå˜åŒ–ï¼Œé‡æ–°åˆ†é…output buffer ?
 
-		es_stream_width_ = es_width;
-		es_stream_height_ = es_height;
-	}
+        es_stream_width_ = es_width;
+        es_stream_height_ = es_height;
+    }
 
-	return 0;
+    return 0;
 }
 
 IMFSample* AvcDecoder::alloc_output_buffer(int width, int height)
 {
-	HRESULT result;
-	IMFMediaBuffer* buffer = NULL;
-	IMFSample *sample = NULL;
+    HRESULT result;
+    IMFMediaBuffer* buffer = NULL;
+    IMFSample *sample = NULL;
 
-	result = MFCreateSample(&sample);
+    result = MFCreateSample(&sample);
 
-	buffer = NULL;
-	DWORD sample_buffer_size = (DWORD)(es_stream_width_ * es_stream_height_ * 1.5);
-	result = MFCreateMemoryBuffer(sample_buffer_size, &buffer);
-	sample->AddBuffer(buffer);
+    buffer = NULL;
+    DWORD sample_buffer_size = (DWORD)(es_stream_width_ * es_stream_height_ * 1.5);
+    result = MFCreateMemoryBuffer(sample_buffer_size, &buffer);
+    sample->AddBuffer(buffer);
+    buffer->Release();
 
-	// FIXME: Ê¹ÓÃbuffer pool
+    // FIXME: ä½¿ç”¨buffer pool
 
-	return sample;
+    return sample;
 }
 
 void AvcDecoder::free_output_buffer(IMFSample* sample)
 {
-	// FIXME: Ê¹ÓÃbuffer pool
+    // FIXME: ä½¿ç”¨buffer pool
 
-	if (sample == NULL)
-	{
-		return;
-	}
+    if (sample == NULL)
+    {
+        return;
+    }
 
-	HRESULT result;
-	DWORD buffer_count = 0;
-	DWORD i = 0;
+    HRESULT result;
+    DWORD buffer_count = 0;
+    DWORD i = 0;
 
-	IMFMediaBuffer* buffer = NULL;
-	buffer_count = 0;
-	result = sample->GetBufferCount(&buffer_count);
-	for (i = 0; i < buffer_count; ++i)
-	{
-		result = sample->GetBufferByIndex(i, &buffer);
-		buffer->Release();
-	}
-	sample->Release();
+    IMFMediaBuffer* buffer = NULL;
+    buffer_count = 0;
+    result = sample->GetBufferCount(&buffer_count);
+    for (i = 0; i < buffer_count; ++i)
+    {
+        result = sample->GetBufferByIndex(i, &buffer);
+        buffer->Release();
+    }
+    sample->Release();
 
-	return;
+    return;
 }
 
 int AvcDecoder::decode(Frame* frame)
 {
-	int ret = -1;
-	HRESULT result;
+    int ret = -1;
+    HRESULT result;
 
   #if 0
-	if (check_frame(frame->data, frame->frame_len) != 0)
-	{
-		return 0;
-	}
+    if (check_frame(frame->data, frame->frame_len) != 0)
+    {
+        return 0;
+    }
   #endif
 
-	/********************************************************************************/
+    /********************************************************************************/
 
-	IMFMediaBuffer* buffer = NULL;
-	result = MFCreateMemoryBuffer(frame->frame_len, &buffer);
+    IMFMediaBuffer* buffer = NULL;
+    result = MFCreateMemoryBuffer(frame->frame_len, &buffer);
 
-	BYTE *data_ptr = NULL;
-	DWORD max_buffer_len = 0;
-	DWORD current_data_len = 0;
-	result = buffer->Lock(&data_ptr, &max_buffer_len, &current_data_len);
-	memcpy(data_ptr, frame->data, frame->frame_len);
-	buffer->SetCurrentLength(frame->frame_len);
-	buffer->Unlock();
+    BYTE *data_ptr = NULL;
+    DWORD max_buffer_len = 0;
+    DWORD current_data_len = 0;
+    result = buffer->Lock(&data_ptr, &max_buffer_len, &current_data_len);
+    memcpy(data_ptr, frame->data, frame->frame_len);
+    buffer->SetCurrentLength(frame->frame_len);
+    buffer->Unlock();
 
-	IMFSample *sample = NULL;
-	result = MFCreateSample(&sample);
-	sample->AddBuffer(buffer);
+    IMFSample *sample = NULL;
+    result = MFCreateSample(&sample);
+    sample->AddBuffer(buffer);
+    buffer->Release();
 
-	result = video_decoder_->ProcessInput(input_stream_id_, sample, 0);
-	if (result == S_OK)
-	{
-		ret = 0;
-	}
-	else
-	{
-		//printf("video_decoder->ProcessInput() failed, ret: 0x%X\n", result);
-	}
+    result = video_decoder_->ProcessInput(input_stream_id_, sample, 0);
+    if (result == S_OK)
+    {
+        ret = 0;
+    }
+    else
+    {
+        //printf("video_decoder->ProcessInput() failed, ret: 0x%X\n", result);
+    }
 
-	if (!mft_hold_input_buffer_)
-	{
-		buffer->Release();
-		sample->RemoveAllBuffers();
-		sample->Release();
-	}
+    if (!mft_hold_input_buffer_)
+    {
+        buffer->Release();
+        sample->RemoveAllBuffers();
+        sample->Release();
+    }
 
-	/********************************************************************************/
+    /********************************************************************************/
 
-	MFT_OUTPUT_DATA_BUFFER output_buffer;
-	DWORD output_flags = 0;
+    MFT_OUTPUT_DATA_BUFFER output_buffer;
+    DWORD output_flags = 0;
 
-	memset(&output_buffer, 0, sizeof(output_buffer));
-	output_buffer.dwStreamID = output_stream_id_;
-	output_buffer.pSample = NULL;
-	output_buffer.dwStatus = 0;
-	output_buffer.pEvents = NULL;
+    memset(&output_buffer, 0, sizeof(output_buffer));
+    output_buffer.dwStreamID = output_stream_id_;
+    output_buffer.pSample = NULL;
+    output_buffer.dwStatus = 0;
+    output_buffer.pEvents = NULL;
 
-	if (need_client_allocate_output_buffer_)
-	{
-		/* ĞèÒªÓÃ»§À´·ÖÅäbuffer */
-		output_buffer.pSample = alloc_output_buffer(es_stream_width_, es_stream_height_);
-	}
+    if (need_client_allocate_output_buffer_)
+    {
+        /* éœ€è¦ç”¨æˆ·æ¥åˆ†é…buffer */
+        output_buffer.pSample = alloc_output_buffer(es_stream_width_, es_stream_height_);
+    }
 
-	DWORD buffer_count = 0;
-	DWORD i = 0;
+    DWORD buffer_count = 0;
+    DWORD i = 0;
 
-	result = video_decoder_->ProcessOutput(MFT_PROCESS_OUTPUT_DISCARD_WHEN_NO_BUFFER, 1, &output_buffer, &output_flags);
-	if (result == S_OK)
-	{
-		Image* image = allocator_->alloc();
-		int image_len = 0;
+    result = video_decoder_->ProcessOutput(MFT_PROCESS_OUTPUT_DISCARD_WHEN_NO_BUFFER, 1, &output_buffer, &output_flags);
+    if (result == S_OK)
+    {
+        Image* image = allocator_->alloc();
+        int image_len = 0;
 
-		result = output_buffer.pSample->GetBufferCount(&buffer_count);
-		for (i = 0; i < buffer_count; ++i)
-		{
-			result = output_buffer.pSample->GetBufferByIndex(0, &buffer);
-			result = buffer->Lock(&data_ptr, &max_buffer_len, &current_data_len);
-			
-			/* FIXME: ´Ë´¦Ìî³äÍ¼ÏñÊı¾İ´ıÓÅ»¯ */
-			memcpy((uint8_t*)image->image->data+image_len, data_ptr, current_data_len);
-			image_len += current_data_len;
+        result = output_buffer.pSample->GetBufferCount(&buffer_count);
+        for (i = 0; i < buffer_count; ++i)
+        {
+            result = output_buffer.pSample->GetBufferByIndex(0, &buffer);
+            result = buffer->Lock(&data_ptr, &max_buffer_len, &current_data_len);
+            
+            /* FIXME: æ­¤å¤„å¡«å……å›¾åƒæ•°æ®å¾…ä¼˜åŒ– */
+            memcpy((uint8_t*)image->image->data+image_len, data_ptr, current_data_len);
+            image_len += current_data_len;
 
-			buffer->Unlock();
-		}
+            buffer->Unlock();
+        }
 
-		image_sink_(image);
+        image_sink_(image);
 
-		IMFCollection* ret_events = output_buffer.pEvents;
-		if (ret_events)
-		{
-			IMFMediaEvent* event = NULL;
-			DWORD event_index = 0;
-			do
-			{
-				result = ret_events->GetElement(event_index, reinterpret_cast<IUnknown**>(&event));
-				event_index++;
+        IMFCollection* ret_events = output_buffer.pEvents;
+        if (ret_events)
+        {
+            IMFMediaEvent* event = NULL;
+            DWORD event_index = 0;
+            do
+            {
+                result = ret_events->GetElement(event_index, reinterpret_cast<IUnknown**>(&event));
+                event_index++;
 
-				if (result != S_OK)
-				{
-					break;
-				}
-			} while (1);
+                if (result != S_OK)
+                {
+                    break;
+                }
+            } while (1);
 
-			ret_events->Release();
-		}
-	}
+            ret_events->Release();
+        }
+    }
 
-	free_output_buffer(output_buffer.pSample);
+    free_output_buffer(output_buffer.pSample);
 
-	return ret;
+    return ret;
 }
 
 unsigned __stdcall AvcDecoder::thread_entry(void* arg)
 {
-	AvcDecoder* thiz = (AvcDecoder*)arg;
-	thiz->decode_routine();
-	return 0;
+    AvcDecoder* thiz = (AvcDecoder*)arg;
+    thiz->decode_routine();
+    return 0;
 }
 
 #ifdef TEST_AVC_DECODER
@@ -555,52 +557,50 @@ FILE* fp_img;
 
 void on_img(Image* image)
 {
-	fwrite(image->image->data, 1, image->image->size, fp_img);
+    fwrite(image->image->data, 1, image->image->size, fp_img);
 
-	image->release();
+    image->release();
 
-	return;
+    return;
 }
 
 int main(int argc, char *argv[])
 {
-	char frame_buffer[640*48];
-	int frame_buffer_len = 640 * 48;
-	int frame_size = 0;
+    char frame_buffer[640*48];
+    int frame_buffer_len = 640 * 48;
+    int frame_size = 0;
 
-	MFStartup(MF_VERSION, 0);
+    MFStartup(MF_VERSION, 0);
 
-	fp = fopen("encode_with_size.h264", "rb");
-	fp_img = fopen("img.nv12", "wb");
+    fp = fopen("encode_with_size.h264", "rb");
+    fp_img = fopen("img.nv12", "wb");
 
-	ImageAllocator image_allocator(10, 640, 480);
-	FrameAllocator frame_allocator(10, frame_buffer_len);
+    ImageAllocator image_allocator(10, 640, 480);
+    FrameAllocator frame_allocator(10, frame_buffer_len);
 
-	ImageSink img_sink = on_img;
-	AvcDecoder avc_decoder(&image_allocator, img_sink);
+    ImageSink img_sink = on_img;
+    AvcDecoder avc_decoder(&image_allocator, img_sink);
 
-	avc_decoder.start();
+    avc_decoder.start();
 
-	while (!feof(fp))
-	{
-		Frame* frame = frame_allocator.alloc();
+    while (!feof(fp))
+    {
+        Frame* frame = frame_allocator.alloc();
 
-		fread(&frame->frame_len, 1, sizeof(frame->frame_len), fp);
-		fread(frame->data, 1, frame->frame_len, fp);
+        fread(&frame->frame_len, 1, sizeof(frame->frame_len), fp);
+        fread(frame->data, 1, frame->frame_len, fp);
 
-		avc_decoder.submit(frame);
-	}
+        avc_decoder.submit(frame);
+    }
 
-	Sleep(40000);
+    avc_decoder.stop();
 
-	avc_decoder.stop();
+    fclose(fp);
+    fclose(fp_img);
 
-	fclose(fp);
-	fclose(fp_img);
+    MFShutdown();
 
-	MFShutdown();
-
-	return 0;
+    return 0;
 }
 
 #endif
