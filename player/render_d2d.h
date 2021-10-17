@@ -42,9 +42,7 @@ class Render
     HWND hwnd_;
     ID2D1HwndRenderTarget* render_target_;
 	BYTE* bitmap_buffer_;
-	int bitmap_bufer_len;
-
-	
+    
     list<Image*> images_to_render_;
     CRITICAL_SECTION images_lock_;
 

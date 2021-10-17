@@ -15,7 +15,6 @@ Render::Render(int width, int height)
     , hwnd_(NULL)
 	, render_target_(NULL)
 	, bitmap_buffer_(NULL)
-	, bitmap_bufer_len((width*height)<<2)
 {
     init();
 }
@@ -37,7 +36,6 @@ void Render::d2d_init(void)
     
     return;
 }
-
 
 void Render::d2d_uninit(void)
 {
@@ -102,7 +100,7 @@ int Render::init(void)
 {
 	HRESULT result;
 
-	InitializeCriticalSectionAndSpinCount(&images_lock_, NULL);
+    InitializeCriticalSectionAndSpinCount(&images_lock_, NULL);
 
 	WNDCLASSEXW wndclsex = {
 		sizeof(WNDCLASSEXW),
@@ -161,29 +159,16 @@ int Render::init(void)
 		printf("failed to create a render target, result: 0x%x\n", result);
 	}
 
+    int bitmap_bufer_len = (width_<<2)*height_;
 	bitmap_buffer_ = (BYTE*)malloc(bitmap_bufer_len);
 
     return 0;
 }
 
-void Render::onRender(void)
+void Render::render(Image* image)
 {
-	HRESULT result;
-
-    Image* image = NULL;
-    EnterCriticalSection(&images_lock_);
-    if (!images_to_render_.empty())
-    {
-        image = images_to_render_.front();
-        images_to_render_.pop_front();
-    }
-    LeaveCriticalSection(&images_lock_);
-
-    if (image == NULL)
-    {
-        return;
-    }
-
+    HRESULT result;
+    
 	libyuv::NV12ToARGB(
 		image->image->y_ptr, image->image->y_stride,
 		image->image->uv_ptr, image->image->uv_stride,
@@ -204,13 +189,32 @@ void Render::onRender(void)
         &bitmap_property, 
         &d2d_bitmap);
 
-	D2D1_RECT_F dst_rect = { 0, 0, (float)image->image->width, (float)image->image->height };
+	D2D1_RECT_F dst_rect = { 0, 0, (float)width_, (float)height_ };
     render_target_->BeginDraw();
     render_target_->DrawBitmap(d2d_bitmap, dst_rect);
     render_target_->EndDraw();
     d2d_bitmap->Release();
 
     return;
+}
+
+void Render::onRender(void)
+{
+    Image* image = NULL;
+    EnterCriticalSection(&images_lock_);
+    if (!images_to_render_.empty())
+    {
+        image = images_to_render_.front();
+        images_to_render_.pop_front();
+    }
+    LeaveCriticalSection(&images_lock_);
+
+    if (image == NULL)
+    {
+        return;
+    }
+
+    render(image);
 }
 
 LRESULT CALLBACK Render::wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
