@@ -55,6 +55,20 @@ target_link_libraries(ut_audio_cap_source_mf
     Mfreadwrite.lib
 )
 
+set(ut_audio_play_mf_SRCS
+    audio_play_mf.cpp
+)
+add_executable(ut_audio_play_mf ${ut_audio_play_mf_SRCS})
+target_compile_definitions(ut_audio_play_mf
+    PRIVATE UT_AUDIO_PLAY_MF
+)
+target_link_libraries(ut_audio_play_mf
+    Mf.lib
+    Mfplat.lib
+    Mfuuid.lib
+    Mfreadwrite.lib
+)
+
 set(toy_player_SRCS
     avc_decoder_mf.cc
     avc_frame_generator_mf.cc
