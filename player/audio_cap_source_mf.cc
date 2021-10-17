@@ -24,6 +24,9 @@ AudioCapSourceMF::AudioCapSourceMF(const AudioFrameSink sink, const wchar_t *dev
 
 AudioCapSourceMF::~AudioCapSourceMF()
 {
+    SafeRelease(source_);
+    SafeRelease(reader_);
+
     return;
 }
 

@@ -29,10 +29,13 @@ private:
     std::thread cap_worker_;
     bool worker_run_;
     AudioFrameSink sink_;
-    
+
     IMFMediaSource *source_;
     IMFSourceReader *reader_;
     DWORD audio_stream_index_;
+
+    AudioCapSourceMF(const AudioCapSourceMF&);
+    AudioCapSourceMF& operator=(const AudioCapSourceMF&);
 };
 
 #endif /* !AUDIO_CAP_SOURCE_MF_H */
