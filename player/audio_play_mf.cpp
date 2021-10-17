@@ -283,6 +283,7 @@ int wmain(int argc, wchar_t *argv[])
         media_buf->Release();
     }
     AudioPlayMF play([&mute_sample]() -> IMFSample*{
+        mute_sample->AddRef();
         return mute_sample;
     });
 
