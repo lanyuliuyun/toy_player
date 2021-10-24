@@ -262,38 +262,59 @@ void AudioPlayMF::play_routine()
 
 #ifdef UT_AUDIO_PLAY_MF
 
+#include <stdio.h>
+
 int wmain(int argc, wchar_t *argv[])
 {
     CoInitializeEx(0, COINIT_MULTITHREADED);
     MFStartup(MF_VERSION);
-    
-    IMFSample *mute_sample = NULL;
+
+    FILE *fp = _wfopen(argv[1], L"rb");
+    if (fp == NULL)
     {
-        MFCreateSample(&mute_sample);
+        MFShutdown();
+        CoUninitialize();
+
+        return 0;
+    }
+
+    LONGLONG sample_pts = 0;
+    auto file_source = [&fp, &sample_pts]() -> IMFSample*{
+        if (feof(fp)) { return NULL; }
+
+        IMFSample *sample = NULL;
+        MFCreateSample(&sample);
         IMFMediaBuffer *media_buf = NULL;
         MFCreateMemoryBuffer(960, &media_buf);
-        
+
         BYTE *data = NULL;
         DWORD max_len = 0;
         media_buf->Lock(&data, &max_len, NULL);
-        memset(data, 0, max_len);
+        int size = fread(data, 1, max_len, fp);
         media_buf->Unlock();
-        media_buf->SetCurrentLength(max_len);
-        mute_sample->AddBuffer(media_buf);
+        media_buf->SetCurrentLength(size);
+        sample->AddBuffer(media_buf);
         media_buf->Release();
-    }
-    AudioPlayMF play([&mute_sample]() -> IMFSample*{
-        mute_sample->AddRef();
-        return mute_sample;
-    });
+
+        LONGLONG duration = 10000 * (size / 96);
+        sample->SetSampleDuration(duration);
+        sample->SetSampleFlags(0);
+        sample->SetSampleTime(sample_pts);
+
+        sample_pts += duration;
+
+        return sample;
+    };
+
+    AudioPlayMF play(file_source);
 
     play.start();
-    
+
     getchar();
     
     play.stop();
-    
-    mute_sample->Release();
+
+    fclose(fp);
 
     MFShutdown();
     CoUninitialize();
