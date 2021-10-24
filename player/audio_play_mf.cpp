@@ -190,7 +190,9 @@ void AudioPlayMF::setup(const wchar_t *dev_name)
         input_media_type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, 1);
         input_media_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, 48000);
         input_media_type->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 2);
+        input_media_type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 96000);
         input_media_type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
+        input_media_type->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
     }
     hr = media_type_handler->SetCurrentMediaType(input_media_type);
     SafeRelease(media_type_handler);
