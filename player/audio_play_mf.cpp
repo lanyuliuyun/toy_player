@@ -292,9 +292,9 @@ int wmain(int argc, wchar_t *argv[])
         BYTE *data = NULL;
         DWORD max_len = 0;
         media_buf->Lock(&data, &max_len, NULL);
-        int size = fread(data, 1, max_len, fp);
+        size_t size = fread(data, 1, max_len, fp);
         media_buf->Unlock();
-        media_buf->SetCurrentLength(size);
+        media_buf->SetCurrentLength((DWORD)size);
         sample->AddBuffer(media_buf);
         media_buf->Release();
 

@@ -2,6 +2,10 @@
 #include "audio_cap_source_mf.h"
 #include "audio_play_mf.h"
 
+extern "C" {
+#include <libavutil/audio_fifo.h>
+}
+
 #include <Objbase.h>
 #include <mfapi.h>
 
@@ -12,36 +16,80 @@
 class AudioSampleQueue
 {
 public:
-    AudioSampleQueue() {}
+    AudioSampleQueue()
+    {
+        audio_queue_ = av_audio_fifo_alloc(AV_SAMPLE_FMT_S16, 1, 1920);
+        sample_pts_ = 0;
+    }
     ~AudioSampleQueue() {
-        for (IMFSample* s : samples_)
-        {
-            s->Release();
-        }
-        samples_.clear();
+        av_audio_fifo_free(audio_queue_);
     }
 
     void put(IMFSample* sample)
     {
-        std::lock_guard<std::mutex> guard(samples_lock_);
-        sample->AddRef();
-        samples_.push_back(sample);
+        std::lock_guard<std::mutex> guard(audio_queue_lock_);
+
+        DWORD buf_count = 0;
+        sample->GetBufferCount(&buf_count);
+        for (DWORD i = 0; i < buf_count; ++i)
+        {
+            IMFMediaBuffer *buf = NULL;
+            sample->GetBufferByIndex(i, &buf);
+            if (buf)
+            {
+                BYTE *data = NULL;
+                DWORD data_len = 0;
+                buf->Lock(&data, NULL, &data_len);
+                av_audio_fifo_write(audio_queue_, (void**)&data, (data_len>>1));
+                buf->Unlock();
+                buf->Release();
+            }
+        }
     }
 
     IMFSample* get()
     {
+        std::lock_guard<std::mutex> guard(audio_queue_lock_);
+
+        int sample_count = av_audio_fifo_size(audio_queue_);
+
+        enum { kAudioFrameSampleCount = 960 };
+
         IMFSample *sample = NULL;
-        std::lock_guard<std::mutex> guard(samples_lock_);
-        if (!samples_.empty())
+        MFCreateSample(&sample);
+
+        IMFMediaBuffer *buf = NULL;
+        MFCreateMemoryBuffer((kAudioFrameSampleCount * 2), &buf);
+        BYTE *data = NULL;
+        buf->Lock(&data, NULL, NULL);
+        if (sample_count > kAudioFrameSampleCount)
         {
-            sample = samples_.front();
-            samples_.pop_front();
+            av_audio_fifo_read(audio_queue_, (void**)&data, kAudioFrameSampleCount);
         }
+        else
+        {
+            memset(data, 0, (kAudioFrameSampleCount * 2));
+        }
+        buf->Unlock();
+        buf->SetCurrentLength((kAudioFrameSampleCount * 2));
+
+        sample->AddBuffer(buf);
+        buf->Release();
+
+        LONGLONG duration = 10000 * 20;
+        sample->SetSampleDuration(duration);
+        sample->SetSampleFlags(0);
+        sample->SetSampleTime(sample_pts_);
+
+        sample_pts_ += duration;
+
         return sample;
     }
+
 private:
-    std::list<IMFSample*> samples_;
-    std::mutex samples_lock_;
+    AVAudioFifo *audio_queue_;
+    LONGLONG sample_pts_ = 0;
+    std::mutex audio_queue_lock_;
 };
 
 int wmain(int argc, wchar_t *argv[])

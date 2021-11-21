@@ -126,7 +126,9 @@ void AudioCapSourceMF::setup(const wchar_t *dev_name)
                 media_type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, 1);
                 media_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, 48000);
                 media_type->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 2);
+                media_type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 96000);
                 media_type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
+                media_type->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
                 hr = reader->SetCurrentMediaType(stream_index, NULL, media_type);
                 if (hr == S_OK)
                 {
@@ -198,7 +200,7 @@ int wmain(int argc, wchar_t *argv[])
         DWORD data_len = 0;
         sample->GetTotalLength(&data_len);
 
-        wprintf(L"Audio Sample, duration: %lldus, flags: 0x%X, PTS: %lld, data_len: %u\n", duration, flags, pts, data_len);
+        wprintf(L"Audio Sample, duration: %lldms, flags: 0x%X, PTS: %lldms, data_len: %u\n", (duration/10000), flags, (pts/10000), data_len);
     });
 
     cap.start();

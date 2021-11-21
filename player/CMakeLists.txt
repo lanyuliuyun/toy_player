@@ -80,6 +80,7 @@ target_link_libraries(ut_cap_play
     Mfplat.lib
     Mfuuid.lib
     Mfreadwrite.lib
+    avutil.lib
 )
 
 set(toy_player_SRCS
