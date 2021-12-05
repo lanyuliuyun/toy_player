@@ -8,6 +8,7 @@ extern "C" {
 
 #include <Objbase.h>
 #include <mfapi.h>
+#include <stdio.h>
 
 #include <list>
 #include <mutex>
@@ -100,6 +101,11 @@ int wmain(int argc, wchar_t *argv[])
     AudioSampleQueue queue;
 
     AudioCapSourceMF cap(std::bind(&AudioSampleQueue::put, &queue, std::placeholders::_1));
+
+    DWORD sample_rate, channels;
+    cap.getSpec(&sample_rate, &channels);
+    printf("audio cap spec: sample_rate: %u, channels: %u\n", sample_rate, channels);
+
     AudioPlayMF play(std::bind(&AudioSampleQueue::get, &queue));
 
     cap.start();

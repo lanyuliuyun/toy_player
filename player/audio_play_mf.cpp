@@ -182,22 +182,47 @@ void AudioPlayMF::setup(const wchar_t *dev_name)
 
     IMFMediaTypeHandler *media_type_handler = NULL;
     hr = stream_sink->GetMediaTypeHandler(&media_type_handler);
+
+  #if 0
+    printf("Enumerate all play media_type:\n");
+    DWORD media_type_count = 0;
+    media_type_handler->GetMediaTypeCount(&media_type_count);
+    for (DWORD i = 0; i < media_type_count; ++i)
+    {
+        IMFMediaType *media_type = NULL;
+        media_type_handler->GetMediaTypeByIndex(i, &media_type);
+        /* 检查是否是所需规格 */
+        media_type->Release();
+    }
+  #endif
+
+  #if 1
+    /* 实际上从输出设备支持的规格中选择一个，此处固定选择一个 48K/mono 规格 */
+    DWORD sample_rate = 48000;
+    DWORD channels = 1;
     IMFMediaType *input_media_type = NULL;
     {
         MFCreateMediaType(&input_media_type);
         input_media_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
         input_media_type->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
-        input_media_type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, 1);
-        input_media_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, 48000);
-        input_media_type->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 2);
-        input_media_type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 96000);
+        input_media_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, sample_rate);
+        input_media_type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, channels);
         input_media_type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
+        UINT32 block_align = channels * 2;
+        input_media_type->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, block_align);
+        UINT32 avg_bytes_per_sec = sample_rate * block_align;
+        input_media_type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, avg_bytes_per_sec);
         input_media_type->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
+
+        printf("audio play spec: sample_rate: %u, channels: %u, block_align: %u, avg_bytes_per_sec: %u\n",
+            sample_rate, channels, block_align, avg_bytes_per_sec);
     }
     hr = media_type_handler->SetCurrentMediaType(input_media_type);
-    SafeRelease(media_type_handler);
     SafeRelease(input_media_type);
-    
+  #endif
+
+    SafeRelease(media_type_handler);
+
     IMFMediaSinkPreroll *media_sink_preroll = NULL;
     if (sink_spec & MEDIASINK_CAN_PREROLL)
     {
@@ -266,12 +291,15 @@ void AudioPlayMF::play_routine()
 
 #include <stdio.h>
 
-int wmain(int argc, wchar_t *argv[])
+int main(int argc, char *argv[])
 {
     CoInitializeEx(0, COINIT_MULTITHREADED);
     MFStartup(MF_VERSION);
 
-    FILE *fp = _wfopen(argv[1], L"rb");
+    int sample_rate = 48000;
+    int channels = 1;
+
+    FILE *fp = fopen(argv[1], "rb");
     if (fp == NULL)
     {
         MFShutdown();
@@ -280,14 +308,16 @@ int wmain(int argc, wchar_t *argv[])
         return 0;
     }
 
+    int frame_size = channels * 2 * 20 * (sample_rate / 1000);
+
     LONGLONG sample_pts = 0;
-    auto file_source = [&fp, &sample_pts]() -> IMFSample*{
+    auto file_source = [&fp, frame_size, &sample_pts]() -> IMFSample*{
         if (feof(fp)) { return NULL; }
 
         IMFSample *sample = NULL;
         MFCreateSample(&sample);
         IMFMediaBuffer *media_buf = NULL;
-        MFCreateMemoryBuffer(960, &media_buf);
+        MFCreateMemoryBuffer(frame_size, &media_buf);
 
         BYTE *data = NULL;
         DWORD max_len = 0;
@@ -298,7 +328,7 @@ int wmain(int argc, wchar_t *argv[])
         sample->AddBuffer(media_buf);
         media_buf->Release();
 
-        LONGLONG duration = 10000 * (size / 96);
+        LONGLONG duration = 20 * 10000;
         sample->SetSampleDuration(duration);
         sample->SetSampleFlags(0);
         sample->SetSampleTime(sample_pts);
