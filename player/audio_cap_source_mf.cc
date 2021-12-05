@@ -20,7 +20,6 @@ AudioCapSourceMF::AudioCapSourceMF(const AudioFrameSink sink, const wchar_t *dev
     , audio_stream_index_((DWORD)-1)
     , sample_rate_(0)
     , channels_(0)
-    , sample_bits_(0)
 {
     setup(dev_name);
     return;
@@ -164,31 +163,32 @@ void AudioCapSourceMF::setup(const wchar_t *dev_name)
     select_media_type->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &channels);
     UINT32 samples_rate = 0;
     select_media_type->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &samples_rate);
+
     UINT32 sample_bits = 16;
     select_media_type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, sample_bits);
-    UINT32 block_align = channels * samples_rate * (sample_bits >> 3);
+    select_media_type->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
+    UINT32 block_align = channels * (sample_bits >> 3);
     select_media_type->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, block_align);
-    UINT32 avg_bytes_per_sec = block_align;
+    UINT32 avg_bytes_per_sec = samples_rate * block_align;
     select_media_type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, avg_bytes_per_sec);
     hr = reader->SetCurrentMediaType(select_stream_index, NULL, select_media_type);
+    select_media_type->Release();
 
     source_ = source;
     reader_ = reader;
     audio_stream_index_ = select_stream_index;
     sample_rate_ = samples_rate;
     channels_ = channels;
-    sample_bits_ = sample_bits;
 
     return;
 }
 
-int AudioCapSourceMF::getSpec(DWORD *sample_rate, DWORD *channels, DWORD *sample_bits)
+int AudioCapSourceMF::getSpec(DWORD *sample_rate, DWORD *channels)
 {
     if (reader_ == NULL) return 0;
 
     *sample_rate = sample_rate_;
     *channels = channels_;
-    *sample_bits = sample_bits_;
 
     return 1;
 }
@@ -223,7 +223,9 @@ int wmain(int argc, wchar_t *argv[])
     CoInitializeEx(0, COINIT_MULTITHREADED);
     MFStartup(MF_VERSION);
 
-    AudioCapSourceMF cap([](IMFSample* sample){
+    FILE *fp = _wfopen(argv[1], L"wb");
+    AudioCapSourceMF cap([&fp](IMFSample* sample){
+      #if 0
         LONGLONG duration;
         sample->GetSampleDuration(&duration);
         
@@ -237,12 +239,32 @@ int wmain(int argc, wchar_t *argv[])
         sample->GetTotalLength(&data_len);
 
         printf("Audio Sample, duration: %lldms, flags: 0x%X, PTS: %lldms, data_len: %u\n", (duration/10000), flags, (pts/10000), data_len);
+      #endif
+
+      #if 1
+        DWORD buf_count = 0;
+        sample->GetBufferCount(&buf_count);
+        for (DWORD i = 0; i < buf_count; ++i)
+        {
+            IMFMediaBuffer *buf = NULL;
+            sample->GetBufferByIndex(i, &buf);
+            if (buf)
+            {
+                BYTE *data = NULL;
+                DWORD data_len = 0;
+                buf->Lock(&data, NULL, &data_len);
+                fwrite(data, data_len, 1, fp);
+                buf->Unlock();
+                buf->Release();
+            }
+        }
+      #endif
     });
 
-    DWORD sample_rate, channels, sample_bits;
-    if (cap.getSpec(&sample_rate, &channels, &sample_bits))
+    DWORD sample_rate, channels;
+    if (cap.getSpec(&sample_rate, &channels))
     {
-        printf("audio output spec: sample_rate: %u, channels: %u, sample_bits: %u\n", sample_rate, channels, sample_bits);
+        printf("audio output spec: sample_rate: %u, channels: %u\n", sample_rate, channels);
     }
 
     cap.start();
@@ -250,6 +272,8 @@ int wmain(int argc, wchar_t *argv[])
     getchar();
 
     cap.stop();
+
+    fclose(fp);
 
     MFShutdown();
     CoUninitialize();
