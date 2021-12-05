@@ -19,6 +19,8 @@ public:
 
     ~AudioCapSourceMF();
 
+    int getSpec(DWORD *sample_rate, DWORD *channles, DWORD *sample_bits);
+
     int start();
     void stop();
 
@@ -33,6 +35,9 @@ private:
     IMFMediaSource *source_;
     IMFSourceReader *reader_;
     DWORD audio_stream_index_;
+    DWORD sample_rate_;
+    DWORD channels_;
+    DWORD sample_bits_;
 
     AudioCapSourceMF(const AudioCapSourceMF&);
     AudioCapSourceMF& operator=(const AudioCapSourceMF&);
