@@ -5,11 +5,6 @@
 #include <mfapi.h>
 #include <Mferror.h>
 
-AudioCapSourceMF::AudioCapSourceMF(const AudioFrameSink sink) : AudioCapSourceMF(sink, NULL)
-{
-    return;
-}
-
 AudioCapSourceMF::AudioCapSourceMF(const AudioFrameSink sink, const wchar_t *dev_name)
     : cap_worker_()
     , worker_run_(false)
@@ -205,7 +200,31 @@ void AudioCapSourceMF::cap_routine()
 		{
 			if (sample) 
 			{
-                sink_(sample);
+                DWORD data_len = 0;
+                sample->GetTotalLength(&data_len);
+                memset(audio_frame_, 0, sizeof(audio_frame_));
+
+                int8_t *ptr = (int8_t*)audio_frame_;
+
+                DWORD buf_count = 0;
+                sample->GetBufferCount(&buf_count);
+                for (DWORD i = 0; i < buf_count; ++i)
+                {
+                    IMFMediaBuffer *buf = NULL;
+                    sample->GetBufferByIndex(i, &buf);
+                    if (buf)
+                    {
+                        BYTE *data = NULL;
+                        DWORD data_len = 0;
+                        buf->Lock(&data, NULL, &data_len);
+                        memcpy(ptr, data, data_len);
+                        ptr += data_len;
+                        buf->Unlock();
+                        buf->Release();
+                    }
+                }
+
+                sink_(audio_frame_, (data_len>>1), (llTimeStamp / 10000));
 				sample->Release();
 			}
 		}
@@ -214,52 +233,23 @@ void AudioCapSourceMF::cap_routine()
     return;
 }
 
-#ifdef AUDIO_CAP_SOURCE_UT
+#ifdef UT_AUDIO_CAP_SOURCE
 
 #include <stdio.h>
 
-int wmain(int argc, wchar_t *argv[])
+int main(int argc, char *argv[])
 {
     CoInitializeEx(0, COINIT_MULTITHREADED);
     MFStartup(MF_VERSION);
 
-    FILE *fp = _wfopen(argv[1], L"wb");
-    AudioCapSourceMF cap([&fp](IMFSample* sample){
+    FILE *fp = fopen(argv[1], "wb");
+    AudioCapSourceMF cap([&fp](int16_t* sample, int sample_count, int64_t pts){
       #if 0
-        LONGLONG duration;
-        sample->GetSampleDuration(&duration);
-        
-        DWORD flags = 0;
-        sample->GetSampleFlags(&flags);
-        
-        LONGLONG pts = 0;
-        sample->GetSampleTime(&pts);
-        
-        DWORD data_len = 0;
-        sample->GetTotalLength(&data_len);
-
-        printf("Audio Sample, duration: %lldms, flags: 0x%X, PTS: %lldms, data_len: %u\n", (duration/10000), flags, (pts/10000), data_len);
+        printf("Audio Frame, sample_count: %d, pts: %" PRId64 "ms\n", sample_count, pts);
       #endif
 
-      #if 1
-        DWORD buf_count = 0;
-        sample->GetBufferCount(&buf_count);
-        for (DWORD i = 0; i < buf_count; ++i)
-        {
-            IMFMediaBuffer *buf = NULL;
-            sample->GetBufferByIndex(i, &buf);
-            if (buf)
-            {
-                BYTE *data = NULL;
-                DWORD data_len = 0;
-                buf->Lock(&data, NULL, &data_len);
-                fwrite(data, data_len, 1, fp);
-                buf->Unlock();
-                buf->Release();
-            }
-        }
-      #endif
-    });
+        fwrite(sample, sample_count, sizeof(int16_t), fp);
+    }, NULL);
 
     DWORD sample_rate, channels;
     if (cap.getSpec(&sample_rate, &channels))

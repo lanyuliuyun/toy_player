@@ -117,7 +117,7 @@ int Render::init(void)
 		L"RenderWindow",
 		NULL
 	};
-	RegisterClassEx(&wndclsex);
+	RegisterClassExW(&wndclsex);
 
     int wnd_width = width_ + GetSystemMetrics(SM_CXFRAME) * 2;
     int wnd_height = height_ + GetSystemMetrics(SM_CYFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION);

@@ -1,5 +1,5 @@
 
-#include "audio_play_mf.h"
+#include "audio_play_sink_mf.h"
 #include "util.hpp"
 
 #include <mfapi.h>
@@ -287,7 +287,7 @@ void AudioPlayMF::play_routine()
 }
 
 
-#ifdef UT_AUDIO_PLAY_MF
+#ifdef UT_AUDIO_PLAY_SINK_MF
 
 #include <stdio.h>
 

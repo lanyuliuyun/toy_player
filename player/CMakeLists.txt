@@ -19,7 +19,7 @@ set(ut_avc_frame_generator_SRCS
 )
 add_executable(ut_avc_frame_generator ${ut_avc_frame_generator_SRCS})
 target_compile_definitions(ut_avc_frame_generator
-    PRIVATE AVC_ENCODE_TEST
+    PRIVATE TEST_AVC_ENCODE
 )
 target_link_libraries(ut_avc_frame_generator
     yuv.lib
@@ -46,7 +46,7 @@ set(ut_audio_cap_source_mf_SRCS
 )
 add_executable(ut_audio_cap_source_mf ${ut_audio_cap_source_mf_SRCS})
 target_compile_definitions(ut_audio_cap_source_mf
-    PRIVATE AUDIO_CAP_SOURCE_UT
+    PRIVATE UT_AUDIO_CAP_SOURCE
 )
 target_link_libraries(ut_audio_cap_source_mf
     Mf.lib
@@ -55,27 +55,27 @@ target_link_libraries(ut_audio_cap_source_mf
     Mfreadwrite.lib
 )
 
-set(ut_audio_play_mf_SRCS
-    audio_play_mf.cpp
+set(ut_audio_play_sink_mf_SRCS
+    audio_play_sink_mf.cpp
 )
-add_executable(ut_audio_play_mf ${ut_audio_play_mf_SRCS})
-target_compile_definitions(ut_audio_play_mf
-    PRIVATE UT_AUDIO_PLAY_MF
+add_executable(ut_audio_play_sink_mf ${ut_audio_play_sink_mf_SRCS})
+target_compile_definitions(ut_audio_play_sink_mf
+    PRIVATE UT_AUDIO_PLAY_SINK_MF
 )
-target_link_libraries(ut_audio_play_mf
+target_link_libraries(ut_audio_play_sink_mf
     Mf.lib
     Mfplat.lib
     Mfuuid.lib
     Mfreadwrite.lib
 )
 
-set(ut_cap_play_SRCS
+set(audio_player_SRCS
     audio_cap_source_mf.cc
-    audio_play_mf.cpp
-    cap_play.cc
+    audio_play_sink_mf.cpp
+    audio_player.cc
 )
-add_executable(ut_cap_play ${ut_cap_play_SRCS})
-target_link_libraries(ut_cap_play
+add_executable(audio_player ${audio_player_SRCS})
+target_link_libraries(audio_player
     Mf.lib
     Mfplat.lib
     Mfuuid.lib
@@ -83,16 +83,16 @@ target_link_libraries(ut_cap_play
     avutil.lib
 )
 
-set(toy_player_SRCS
+set(video_player_SRCS
     avc_decoder_mf.cc
     avc_frame_generator_mf.cc
     frame_allocator.cc
     image_allocator.cc
-    player.cc
+    video_player.cc
     render_d2d.cc
 )
-add_executable(toy_player ${toy_player_SRCS})
-target_link_libraries(toy_player
+add_executable(video_player ${video_player_SRCS})
+target_link_libraries(video_player
     D2d1.lib
     yuv.lib
     Mfplat.lib

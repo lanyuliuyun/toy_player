@@ -477,7 +477,7 @@ unsigned __stdcall AvcFrameGenerator::thread_entry(void * arg)
 }
 
 
-#ifdef AVC_ENCODE_TEST
+#ifdef TEST_AVC_ENCODE
 
 /*
 1 encoder actives was returned

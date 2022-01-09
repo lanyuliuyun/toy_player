@@ -1,6 +1,6 @@
 
 #include "audio_cap_source_mf.h"
-#include "audio_play_mf.h"
+#include "audio_play_sink_mf.h"
 
 extern "C" {
 #include <libavutil/audio_fifo.h>
@@ -26,26 +26,10 @@ public:
         av_audio_fifo_free(audio_queue_);
     }
 
-    void put(IMFSample* sample)
+    void put(int16_t* sample, int sample_count, int64_t pts)
     {
         std::lock_guard<std::mutex> guard(audio_queue_lock_);
-
-        DWORD buf_count = 0;
-        sample->GetBufferCount(&buf_count);
-        for (DWORD i = 0; i < buf_count; ++i)
-        {
-            IMFMediaBuffer *buf = NULL;
-            sample->GetBufferByIndex(i, &buf);
-            if (buf)
-            {
-                BYTE *data = NULL;
-                DWORD data_len = 0;
-                buf->Lock(&data, NULL, &data_len);
-                av_audio_fifo_write(audio_queue_, (void**)&data, (data_len>>1));
-                buf->Unlock();
-                buf->Release();
-            }
-        }
+        av_audio_fifo_write(audio_queue_, (void**)&sample, sample_count);
     }
 
     IMFSample* get()
@@ -93,14 +77,14 @@ private:
     std::mutex audio_queue_lock_;
 };
 
-int wmain(int argc, wchar_t *argv[])
+int main(int argc, char *argv[])
 {
     CoInitializeEx(0, COINIT_MULTITHREADED);
-    MFStartup(MF_VERSION);
+    MFStartup(MF_VERSION, 0);
 
     AudioSampleQueue queue;
 
-    AudioCapSourceMF cap(std::bind(&AudioSampleQueue::put, &queue, std::placeholders::_1));
+    AudioCapSourceMF cap(std::bind(&AudioSampleQueue::put, &queue, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3), NULL);
 
     DWORD sample_rate, channels;
     cap.getSpec(&sample_rate, &channels);
