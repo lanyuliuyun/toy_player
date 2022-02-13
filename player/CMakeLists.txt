@@ -55,6 +55,17 @@ target_link_libraries(ut_audio_cap_source_mf
     Mfreadwrite.lib
 )
 
+set(ut_audio_cap_source_wi_SRCS
+    audio_cap_source_wi.cc
+)
+add_executable(ut_audio_cap_source_wi ${ut_audio_cap_source_wi_SRCS})
+target_compile_definitions(ut_audio_cap_source_wi
+    PRIVATE UT_AUDIO_CAP_SOURCE_WI
+)
+target_link_libraries(ut_audio_cap_source_wi
+    Winmm
+)
+
 set(ut_audio_play_sink_mf_SRCS
     audio_play_sink_mf.cpp
 )
