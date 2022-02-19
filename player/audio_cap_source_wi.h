@@ -14,7 +14,7 @@ class AudioCapSourceWI
 public:
     typedef std::function<void(int16_t* sample, int sample_count, int64_t pts)> AudioFrameSink;
     
-    AudioCapSourceWI(const AudioFrameSink sink, const char *dev_name);
+    AudioCapSourceWI(const AudioFrameSink &sink, const char *dev_name);
 
     ~AudioCapSourceWI();
 
@@ -36,7 +36,6 @@ private:
     int dev_index_;
     DWORD sample_rate_;
     DWORD channels_;
-    int16_t audio_frame_[48 * 20];
 
     AudioCapSourceWI(const AudioCapSourceWI&);
     AudioCapSourceWI& operator=(const AudioCapSourceWI&);

@@ -7,7 +7,7 @@
 
 #include <string.h>
 
-AudioCapSourceWI::AudioCapSourceWI(const AudioFrameSink sink, const char *dev_name)
+AudioCapSourceWI::AudioCapSourceWI(const AudioFrameSink &sink, const char *dev_name)
     : cap_worker_()
     , worker_run_(false)
     , sink_(sink)
@@ -49,9 +49,9 @@ int AudioCapSourceWI::start()
     WAVEFORMATEX wav_fmt;
     memset(&wav_fmt, 0, sizeof(wav_fmt));
     wav_fmt.wFormatTag = WAVE_FORMAT_PCM;
-    wav_fmt.nChannels = 1;
-    wav_fmt.nSamplesPerSec = 48000;
-    wav_fmt.nAvgBytesPerSec = 48000 * 2;
+    wav_fmt.nChannels = (WORD)channels_;
+    wav_fmt.nSamplesPerSec = sample_rate_;
+    wav_fmt.nAvgBytesPerSec = sample_rate_ * 2;
     wav_fmt.nBlockAlign = 2;
     wav_fmt.wBitsPerSample = 16;
     wav_fmt.cbSize = 0;
@@ -182,34 +182,59 @@ void AudioCapSourceWI::setup(const char *dev_name)
 
 void AudioCapSourceWI::cap_routine()
 {
-    int64_t pts = 0;
+    int audio_frame_size = 2 * (sample_rate_ / 50) * channels_;
+    std::unique_ptr<int16_t[]> audio_frame_data(new int16_t[audio_frame_size * 4]);
+    int16_t *audio_frame_output = audio_frame_data.get();
+    int16_t *audio_frame_data_ptrs[3] = {
+        audio_frame_output + audio_frame_size,
+        audio_frame_output + audio_frame_size * 2,
+        audio_frame_output + audio_frame_size * 3,
+    };
+    
     MMRESULT res;
 
-    WAVEHDR wav_frame;
-    memset(&wav_frame, 0, sizeof(wav_frame));
-    wav_frame.lpData = (LPSTR)audio_frame_;
-    wav_frame.dwBufferLength = sizeof(audio_frame_);
-    wav_frame.dwFlags = 0;
-    res = waveInPrepareHeader(wave_dev_, &wav_frame, sizeof(wav_frame));
-    res = waveInAddBuffer(wave_dev_, &wav_frame, sizeof(wav_frame));
+    WAVEHDR wav_frames[3];
+    for (int i = 0; i < 3; ++i)
+    {
+        memset(&wav_frames[i], 0, sizeof(wav_frames[i]));
+        wav_frames[i].lpData = (LPSTR)audio_frame_data_ptrs[i];
+        wav_frames[i].dwBufferLength = audio_frame_size;
+        wav_frames[i].dwUser = (DWORD_PTR)i;
+        wav_frames[i].dwFlags = 0;
+        res = waveInPrepareHeader(wave_dev_, &wav_frames[i], sizeof(wav_frames[i]));
+        res = waveInAddBuffer(wave_dev_, &wav_frames[i], sizeof(wav_frames[i]));
+    }
     res = waveInStart(wave_dev_);
+    
+    int buffer_index = 0;
+    int64_t pts = 0;
     while (worker_run_)
     {
         WaitForSingleObject(wave_data_evt_, INFINITE);
         if (!worker_run_) { break; }
 
-        int samples = wav_frame.dwBytesRecorded>>1;
-        sink_(audio_frame_, samples, pts);
-        pts += (1000 * samples) / sample_rate_;
+        WAVEHDR *wav_frame = &wav_frames[buffer_index];
+        if ((wav_frame->dwFlags & WHDR_DONE) && (wav_frame->dwBytesRecorded > 0))
+        {
+            int samples = wav_frame->dwBytesRecorded>>1;
+            memcpy(audio_frame_output, wav_frame->lpData, wav_frame->dwBytesRecorded);
+            waveInUnprepareHeader(wave_dev_, wav_frame, sizeof(*wav_frame));
 
-        waveInUnprepareHeader(wave_dev_, &wav_frame, sizeof(wav_frame));
+            wav_frame = &wav_frames[buffer_index];
+            memset(wav_frame, 0, sizeof(*wav_frame));
+            wav_frame->lpData = (LPSTR)audio_frame_data_ptrs[buffer_index];
+            wav_frame->dwBufferLength = audio_frame_size;
+            wav_frame->dwUser = (DWORD_PTR)buffer_index;
+            wav_frame->dwFlags = 0;
+            res = waveInPrepareHeader(wave_dev_, wav_frame, sizeof(*wav_frame));
+            res = waveInAddBuffer(wave_dev_, wav_frame, sizeof(*wav_frame));
 
-        memset(&wav_frame, 0, sizeof(wav_frame));
-        wav_frame.lpData = (LPSTR)audio_frame_;
-        wav_frame.dwBufferLength = sizeof(audio_frame_);
-        wav_frame.dwFlags = 0;
-        res = waveInPrepareHeader(wave_dev_, &wav_frame, sizeof(wav_frame));
-        res = waveInAddBuffer(wave_dev_, &wav_frame, sizeof(wav_frame));
+            buffer_index++;
+            if (buffer_index == 3) { buffer_index = 0; }
+
+            sink_(audio_frame_output, samples, pts);
+            pts += ((1000 * samples) / channels_) / sample_rate_;
+        }
     }
 
     res = waveInReset(wave_dev_);
