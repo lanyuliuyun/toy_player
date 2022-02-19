@@ -87,11 +87,7 @@ void Render::run(void)
 
 void Render::submit(Image* image)
 {
-    EnterCriticalSection(&images_lock_);
-    images_to_render_.push_back(image);
-    LeaveCriticalSection(&images_lock_);
-
-    InvalidateRect(hwnd_, NULL, FALSE);
+    render(image);
 
     return;
 }
@@ -107,12 +103,11 @@ int Render::init(void)
 		CS_HREDRAW | CS_VREDRAW,
 		wndproc,
 		0,
-		64,
+		0,
 		GetModuleHandleW(NULL),
 		NULL,
 		LoadCursor(NULL, IDC_ARROW),
-		/*(HBRUSH)GetStockObject(BLACK_BRUSH), */
-		NULL,
+		NULL, /*(HBRUSH)GetStockObject(BLACK_BRUSH), */
 		NULL,
 		L"RenderWindow",
 		NULL
@@ -138,7 +133,6 @@ int Render::init(void)
 	SetWindowLongPtrW(hwnd_, GWLP_USERDATA, (LONG_PTR)this);
 
 	ShowWindow(hwnd_, SW_SHOWNORMAL);
-	UpdateWindow(hwnd_);
 
 	D2D1_RENDER_TARGET_PROPERTIES render_target_property = {
 		D2D1_RENDER_TARGET_TYPE_DEFAULT,
@@ -198,35 +192,10 @@ void Render::render(Image* image)
     return;
 }
 
-void Render::onRender(void)
-{
-    Image* image = NULL;
-    EnterCriticalSection(&images_lock_);
-    if (!images_to_render_.empty())
-    {
-        image = images_to_render_.front();
-        images_to_render_.pop_front();
-    }
-    LeaveCriticalSection(&images_lock_);
-
-    if (image == NULL)
-    {
-        return;
-    }
-
-    render(image);
-}
-
 LRESULT CALLBACK Render::wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch(msg)
     {
-        case WM_PAINT:
-        {
-            Render* thiz = (Render*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
-            thiz->onRender();
-            break;
-        }
         case WM_CLOSE:
         {
             PostQuitMessage(0);

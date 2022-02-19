@@ -26,8 +26,6 @@ class Render
 
     void submit(Image* image);
 
-    void onRender(void);
-
   private:
     int init(void);
 
