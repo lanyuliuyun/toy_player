@@ -56,6 +56,7 @@ void AudioCapSourceMF::stop()
     if (worker_run_)
     {
         worker_run_ = false;
+        reader_->Flush(audio_stream_index_);
         cap_worker_.join();
     }
 
@@ -200,8 +201,6 @@ void AudioCapSourceMF::cap_routine()
 		{
 			if (sample) 
 			{
-                DWORD data_len = 0;
-                sample->GetTotalLength(&data_len);
                 memset(audio_frame_, 0, sizeof(audio_frame_));
 
                 int8_t *ptr = (int8_t*)audio_frame_;
@@ -224,8 +223,11 @@ void AudioCapSourceMF::cap_routine()
                     }
                 }
 
+                DWORD data_len = 0;
+                sample->GetTotalLength(&data_len);
+                sample->Release();
+
                 sink_(audio_frame_, (data_len>>1), (llTimeStamp / 10000));
-				sample->Release();
 			}
 		}
     }
@@ -243,8 +245,8 @@ int main(int argc, char *argv[])
     MFStartup(MF_VERSION);
 
     FILE *fp = fopen(argv[1], "wb");
-    AudioCapSourceMF cap([&fp](int16_t* sample, int sample_count, int64_t pts){
-      #if 0
+    AudioCapSourceMF *cap = new AudioCapSourceMF([&fp](int16_t* sample, int sample_count, int64_t pts){
+      #if 1
         printf("Audio Frame, sample_count: %d, pts: %" PRId64 "ms\n", sample_count, pts);
       #endif
 
@@ -252,24 +254,27 @@ int main(int argc, char *argv[])
     }, NULL);
 
     DWORD sample_rate, channels;
-    if (cap.getSpec(&sample_rate, &channels))
+    if (cap->getSpec(&sample_rate, &channels))
     {
         printf("audio output spec: sample_rate: %u, channels: %u\n", sample_rate, channels);
     }
 
-    cap.start();
+    cap->start();
 
     getchar();
 
-    cap.stop();
+    cap->stop();
+
+    delete cap;
 
     fclose(fp);
 
     MFShutdown();
     CoUninitialize();
 
+    printf("=== quit ===\n");
+
     return 0;
 }
 
 #endif /* AUDIO_CAP_SOURCE_UT */
-

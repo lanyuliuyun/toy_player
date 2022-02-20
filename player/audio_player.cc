@@ -17,10 +17,9 @@ extern "C" {
 class AudioSampleQueue
 {
 public:
-    AudioSampleQueue()
+    AudioSampleQueue() : audio_queue_(NULL), sample_pts_(0), audio_queue_lock_()
     {
         audio_queue_ = av_audio_fifo_alloc(AV_SAMPLE_FMT_S16, 1, 1920);
-        sample_pts_ = 0;
     }
     ~AudioSampleQueue() {
         av_audio_fifo_free(audio_queue_);
@@ -73,7 +72,7 @@ public:
 
 private:
     AVAudioFifo *audio_queue_;
-    LONGLONG sample_pts_ = 0;
+    LONGLONG sample_pts_;
     std::mutex audio_queue_lock_;
 };
 
