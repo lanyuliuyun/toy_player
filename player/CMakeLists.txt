@@ -55,6 +55,20 @@ target_link_libraries(ut_audio_cap_source_mf
     Mfreadwrite.lib
 )
 
+set(ut_video_cap_source_mf_SRCS
+    video_cap_source_mf.cc
+)
+add_executable(ut_video_cap_source_mf ${ut_video_cap_source_mf_SRCS})
+target_compile_definitions(ut_video_cap_source_mf
+    PRIVATE UT_VIDEO_CAP_SOURCE
+)
+target_link_libraries(ut_video_cap_source_mf
+    Mf.lib
+    Mfplat.lib
+    Mfuuid.lib
+    Mfreadwrite.lib
+)
+
 set(ut_audio_cap_source_wi_SRCS
     audio_cap_source_wi.cc
 )
