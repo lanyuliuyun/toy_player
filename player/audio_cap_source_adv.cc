@@ -104,7 +104,7 @@ int AudioCapSourceAdv::getSpec(DWORD &sample_rate, DWORD &channles)
     sample_rate = 16000;
     channles = 1;
 
-    return 0;
+    return 1;
 }
 
 int AudioCapSourceAdv::start()
@@ -115,7 +115,7 @@ int AudioCapSourceAdv::start()
     HRESULT hr;
 
     IPropertyStore *media_prop = NULL;
-    media_->QueryInterface(&media_prop);
+    hr = media_->QueryInterface(&media_prop);
 
     PROPVARIANT prov_val;
     PropVariantInit(&prov_val);
@@ -330,8 +330,10 @@ void AudioCapSourceAdv::cap_routine()
 
 int main(int argc, char *argv[])
 {
-    FILE *fp = fopen("audio.pcm", "wb");
+    CoInitializeEx(0, COINIT_MULTITHREADED);
 
+    FILE *fp = fopen("audio.pcm", "wb");
+    {
     AudioCapSourceAdv cap([&fp](int16_t* sample, int sample_count, int64_t pts){
         fwrite(sample, sample_count, sizeof(int16_t), fp);
     }, NULL, NULL);
@@ -347,8 +349,10 @@ int main(int argc, char *argv[])
     getchar();
 
     cap.stop();
-
+    }
     fclose(fp);
+
+    CoUninitialize();
 
     printf("=== quits ===");
 
