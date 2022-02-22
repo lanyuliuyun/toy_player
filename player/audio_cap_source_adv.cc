@@ -86,6 +86,11 @@ AudioCapSourceAdv::AudioCapSourceAdv(const AudioFrameSink sink, const wchar_t *m
     , sink_(sink)
 
     , media_(NULL)
+    , mic_dev_index_(-1)
+    , spk_dev_index_(-1)
+    
+    , audio_frame_output_(NULL)
+    , audio_frame_buf_len_(0)
 {
     setup(mic_dev_name, spk_dev_name);
     return;
