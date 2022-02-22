@@ -80,6 +80,18 @@ target_link_libraries(ut_audio_cap_source_wi
     Winmm
 )
 
+set(ut_audio_cap_source_adv_SRCS
+    audio_cap_source_adv.cc
+)
+add_executable(ut_audio_cap_source_adv ${ut_audio_cap_source_adv_SRCS})
+target_compile_definitions(ut_audio_cap_source_adv
+    PRIVATE UT_AUDIO_CAP_SOURCE_ADV
+)
+target_link_libraries(ut_audio_cap_source_adv
+    Msdmo
+    wmcodecdspuuid
+)
+
 set(ut_audio_play_sink_mf_SRCS
     audio_play_sink_mf.cpp
 )
