@@ -89,7 +89,6 @@ target_compile_definitions(ut_audio_cap_source_adv
 )
 target_link_libraries(ut_audio_cap_source_adv
     Msdmo
-    wmcodecdspuuid
 )
 
 set(ut_audio_play_sink_mf_SRCS

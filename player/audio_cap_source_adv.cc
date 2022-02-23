@@ -12,6 +12,7 @@ DEFINE_GUID(CLSID_MMDeviceEnumerator, 0xBCDE0395, 0xE52F, 0x467C, 0x8E, 0x3D, 0x
 DEFINE_GUID(IID_IMMDeviceEnumerator, 0xA95664D2, 0x9614, 0x4F35, 0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6);
 DEFINE_GUID(IID_IMediaBuffer, 0x59eff8b9, 0x938c, 0x4a26, 0x82, 0xf2, 0x95, 0xcb, 0x84, 0xcd, 0xc8, 0x37);
 DEFINE_GUID(IID_IMediaObject, 0xd8ad0f58, 0x5494, 0x4102, 0x97, 0xc5, 0xec, 0x79, 0x8e, 0x59, 0xbc, 0xf4);
+DEFINE_GUID(CLSID_CWMAudioAEC, 0x745057c7, 0xf353, 0x4f2d, 0xa7, 0xee, 0x58, 0x43, 0x44, 0x77, 0x73, 0x0e);
 
 class CBaseMediaBuffer : public IMediaBuffer {
 public:
@@ -218,14 +219,6 @@ void AudioCapSourceAdv::setup(const wchar_t *mic_dev_name, const wchar_t *spk_de
     hr = CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, IID_IMMDeviceEnumerator, (void**)&dev_enum);
     if (dev_enum == NULL) { return; }
 
-    hr = CoCreateInstance(CLSID_CWMAudioAEC, NULL, CLSCTX_INPROC_SERVER, IID_IMediaObject, (void**)&media_);
-    if (media_ == NULL)
-    {
-        dev_enum->Release();
-        media_ = NULL;
-        return;
-    }
-
     /* 确定采集设备的index */
     int mic_dev_index = -1;
     if (mic_dev_name != NULL)
@@ -256,6 +249,12 @@ void AudioCapSourceAdv::setup(const wchar_t *mic_dev_name, const wchar_t *spk_de
                 PropVariantClear(&prop_val);
             }
             dev_collects->Release();
+        }
+
+        if (mic_dev_index < 0)
+        {
+            dev_enum->Release();
+            return;
         }
     }
 
@@ -290,9 +289,21 @@ void AudioCapSourceAdv::setup(const wchar_t *mic_dev_name, const wchar_t *spk_de
             }
             dev_collects->Release();
         }
+
+        if (spk_dev_index < 0)
+        {
+            dev_enum->Release();
+            return;
+        }
     }
 
     dev_enum->Release();
+
+    hr = CoCreateInstance(CLSID_CWMAudioAEC, NULL, CLSCTX_INPROC_SERVER, IID_IMediaObject, (void**)&media_);
+    if (media_ == NULL)
+    {
+        return;
+    }
 
     mic_dev_index_ = mic_dev_index;
     spk_dev_index_ = spk_dev_index;
@@ -341,6 +352,7 @@ int main(int argc, char *argv[])
     {
     AudioCapSourceAdv cap([&fp](int16_t* sample, int sample_count, int64_t pts){
         fwrite(sample, sample_count, sizeof(int16_t), fp);
+        //printf("samples: %d, pts: %" PRId64 "\n", sample_count, pts);
     }, NULL, NULL);
 
     DWORD sample_rate, channels;
