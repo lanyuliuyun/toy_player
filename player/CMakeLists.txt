@@ -91,6 +91,14 @@ target_link_libraries(ut_audio_cap_source_adv
     Msdmo
 )
 
+set(ut_speaker_cap_source_SRCS
+    speaker_cap_source.cc
+)
+add_executable(ut_speaker_cap_source ${ut_speaker_cap_source_SRCS})
+target_compile_definitions(ut_speaker_cap_source
+    PRIVATE UT_SPEAKER_CAP_SOURCE
+)
+
 set(ut_audio_play_sink_mf_SRCS
     audio_play_sink_mf.cpp
 )
