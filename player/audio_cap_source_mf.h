@@ -13,9 +13,9 @@
 class AudioCapSourceMF
 {
 public:
-    typedef std::function<void(int16_t* sample, int sample_count, int64_t pts)> AudioFrameSink;
+    typedef std::function<void(int16_t* sample, int sample_count, int64_t pts)> PCMFrameSink;
 
-    AudioCapSourceMF(const AudioFrameSink sink, const wchar_t *dev_name);
+    AudioCapSourceMF(const PCMFrameSink sink, const wchar_t *dev_name);
 
     ~AudioCapSourceMF();
 
@@ -30,7 +30,7 @@ private:
 
     std::thread cap_worker_;
     bool worker_run_;
-    AudioFrameSink sink_;
+    PCMFrameSink sink_;
 
     IMFMediaSource *source_;
     IMFSourceReader *reader_;

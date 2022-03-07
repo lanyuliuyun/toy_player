@@ -5,7 +5,7 @@
 #include <mfapi.h>
 #include <Mferror.h>
 
-AudioCapSourceMF::AudioCapSourceMF(const AudioFrameSink sink, const wchar_t *dev_name)
+AudioCapSourceMF::AudioCapSourceMF(const PCMFrameSink sink, const wchar_t *dev_name)
     : cap_worker_()
     , worker_run_(false)
     , sink_(sink)

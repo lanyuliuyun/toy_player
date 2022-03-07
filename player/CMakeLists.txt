@@ -92,7 +92,7 @@ target_link_libraries(ut_audio_cap_source_adv
 )
 
 set(ut_audio_play_sink_mf_SRCS
-    audio_play_sink_mf.cpp
+    audio_play_sink_mf.cc
 )
 add_executable(ut_audio_play_sink_mf ${ut_audio_play_sink_mf_SRCS})
 target_compile_definitions(ut_audio_play_sink_mf
@@ -107,7 +107,7 @@ target_link_libraries(ut_audio_play_sink_mf
 
 set(audio_player_SRCS
     audio_cap_source_mf.cc
-    audio_play_sink_mf.cpp
+    audio_play_sink_mf.cc
     audio_player.cc
 )
 add_executable(audio_player ${audio_player_SRCS})
@@ -117,6 +117,22 @@ target_link_libraries(audio_player
     Mfuuid.lib
     Mfreadwrite.lib
     avutil.lib
+)
+
+set(audio_cap_enc_dec_play_SRCS
+    audio_cap_source_mf.cc
+    opus_codec.cc
+    audio_play_sink_mf.cc
+    audio_cap_enc_dec_play.cc
+)
+add_executable(audio_cap_enc_dec_play ${audio_cap_enc_dec_play_SRCS})
+target_link_libraries(audio_cap_enc_dec_play
+    Mf.lib
+    Mfplat.lib
+    Mfuuid.lib
+    Mfreadwrite.lib
+    avutil.lib
+    opus.lib
 )
 
 set(video_player_SRCS
