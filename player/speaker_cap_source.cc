@@ -1,5 +1,6 @@
 
 #include "speaker_cap_source.h"
+#include "util.hpp"
 
 #include <windows.h>
 #include <initguid.h>
@@ -10,7 +11,6 @@
 #pragma comment(lib, "Msdmo.lib")
 
 DEFINE_GUID(CLSID_MMDeviceEnumerator, 0xBCDE0395, 0xE52F, 0x467C, 0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E);
-DEFINE_GUID(IID_IMMDeviceEnumerator, 0xA95664D2, 0x9614, 0x4F35, 0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6);
 
 SpeakerCapSource::SpeakerCapSource(const AudioFrameSink sink, const wchar_t *spk_dev_name)
     : cap_worker_()
@@ -22,25 +22,48 @@ SpeakerCapSource::SpeakerCapSource(const AudioFrameSink sink, const wchar_t *spk
     , channels_(0)
     , single_frame_size_(0)
 
+    , silent_frame_(NULL)
+
     , data_evt_(NULL)
     , stop_evt_(NULL)
+    , dev_change_evt_(NULL)
 
+    , dev_enum_(NULL)
     , audio_client_(NULL)
+    , audio_data_client_(NULL)
 
     , com_init_here_(false)
+    , ref_count_(0)
 {
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     if (hr == S_OK || hr == S_FALSE) { com_init_here_ = true; }
 
-    setup(spk_dev_name);
+    CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dev_enum_));
+    if (dev_enum_ == NULL) { return; }
+
+    IMMDevice *spk_dev = get_speaker_device(spk_dev_name);
+    if (spk_dev)
+    {
+        data_evt_ = CreateEventW(NULL, FALSE, FALSE, NULL);
+        stop_evt_ = CreateEventW(NULL, FALSE, FALSE, NULL);
+        dev_change_evt_ = CreateEventW(NULL, FALSE, FALSE, NULL);
+
+        setup(spk_dev);
+        spk_dev->Release();
+    }
 }
 
 SpeakerCapSource::~SpeakerCapSource()
 {
+    delete[] silent_frame_;
+
     if (data_evt_ != NULL) { CloseHandle(data_evt_); }
     if (stop_evt_ != NULL) { CloseHandle(stop_evt_); }
+    if (dev_change_evt_ != NULL) { CloseHandle(dev_change_evt_); }
 
-    if (audio_client_ != NULL) { audio_client_->Release(); }
+    SafeRelease(audio_data_client_);
+    SafeRelease(audio_client_);
+    SafeRelease(dev_enum_);
 
     if (com_init_here_) { CoUninitialize(); }
 
@@ -73,7 +96,6 @@ void SpeakerCapSource::stop()
 {
     if (worker_run_)
     {
-        worker_run_ = false;
         SetEvent(stop_evt_);
         cap_worker_.join();
     }
@@ -81,15 +103,57 @@ void SpeakerCapSource::stop()
     return;
 }
 
-void SpeakerCapSource::setup(const wchar_t *spk_dev_name)
+HRESULT STDMETHODCALLTYPE SpeakerCapSource::OnDefaultDeviceChanged(_In_  EDataFlow flow, _In_  ERole role, _In_  LPCWSTR pwstrDefaultDeviceId)
+{
+    if (flow == eRender && role == eConsole)
+    {
+        SetEvent(dev_change_evt_);
+    }
+
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE SpeakerCapSource::QueryInterface(REFIID riid, _COM_Outptr_ void __RPC_FAR *__RPC_FAR *ppvObject)
+{
+    if (ppvObject == NULL) { return E_POINTER; }
+
+    *ppvObject = NULL;
+
+    if (riid == IID_IUnknown)
+    {
+        *ppvObject = static_cast<IUnknown *>(this);
+        AddRef();
+    }
+    else if (riid == __uuidof(IMMNotificationClient))
+    {
+        *ppvObject = static_cast<IMMNotificationClient *>(this);
+        AddRef();
+    }
+    else { return E_NOINTERFACE; }
+
+    return S_OK;
+}
+
+ULONG STDMETHODCALLTYPE SpeakerCapSource::AddRef( void)
+{
+    return InterlockedIncrement(&ref_count_);
+}
+
+ULONG STDMETHODCALLTYPE SpeakerCapSource::Release( void)
+{
+    ULONG ret_val = InterlockedDecrement(&ref_count_);
+    if (ret_val == 0)
+    {
+        delete this;
+    }
+    return ret_val;
+}
+
+void SpeakerCapSource::setup(IMMDevice *spk_dev)
 {
     HRESULT hr;
 
-    IMMDevice *spk_dev = get_speaker_device(spk_dev_name);
-    if (spk_dev == NULL) { return; }
-
     hr = spk_dev->Activate(__uuidof(IAudioClient), CLSCTX_INPROC_SERVER, NULL, reinterpret_cast<void **>(&audio_client_));
-    spk_dev->Release();
 
     WAVEFORMATEX *audio_format = NULL;
     hr = audio_client_->GetMixFormat(&audio_format);
@@ -104,10 +168,13 @@ void SpeakerCapSource::setup(const wchar_t *spk_dev_name)
 
     CoTaskMemFree(audio_format);
 
-    data_evt_ = CreateEventW(NULL, FALSE, FALSE, NULL);
-    audio_client_->SetEventHandle(data_evt_);
+    UINT32 max_frame_size = 0;
+    audio_client_->GetBufferSize(&max_frame_size);
+    silent_frame_ = new uint8_t[single_frame_size_ * max_frame_size];
+    memset(silent_frame_, 0, (single_frame_size_ * max_frame_size));
 
-    stop_evt_ = CreateEventW(NULL, FALSE, FALSE, NULL);
+    audio_client_->SetEventHandle(data_evt_);
+    audio_client_->GetService(IID_PPV_ARGS(&audio_data_client_));
 }
 
 void SpeakerCapSource::cap_routine()
@@ -116,40 +183,19 @@ void SpeakerCapSource::cap_routine()
 
     hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
-    IAudioCaptureClient *audio_data_client = NULL;
-    hr = audio_client_->GetService(IID_PPV_ARGS(&audio_data_client));
+    dev_enum_->RegisterEndpointNotificationCallback(this);
 
     audio_client_->Start();
 
-    uint8_t *silent_frame = new uint8_t[single_frame_size_ * sample_rate_];
-    memset(silent_frame, 0, (single_frame_size_ * sample_rate_));
-
     while (worker_run_)
     {
-        HANDLE evts[] = {data_evt_, stop_evt_};
-        DWORD wait_ret = WaitForMultipleObjects(2, evts, FALSE, INFINITE);
+        HANDLE evts[] = {data_evt_, stop_evt_, dev_change_evt_};
+        DWORD wait_ret = WaitForMultipleObjects(3, evts, FALSE, INFINITE);
         switch (wait_ret)
         {
             case WAIT_OBJECT_0:
             {
-                BYTE *data_ptr = NULL;
-                UINT32 data_size = 0;
-                DWORD flags = 0;
-                UINT64 pts = 0;
-                hr = audio_data_client->GetBuffer(&data_ptr, &data_size, &flags, NULL, &pts);
-                if (SUCCEEDED(hr) && data_size > 0)
-                {
-                    bool silent = flags & AUDCLNT_BUFFERFLAGS_SILENT;
-                    if (silent)
-                    {
-                        sink_(silent_frame, (int)(data_size * single_frame_size_), (pts / 10000), silent);
-                    }
-                    else
-                    {
-                        sink_((uint8_t*)data_ptr, (int)(data_size * single_frame_size_), (pts / 10000), silent);
-                    }
-                    audio_data_client->ReleaseBuffer(data_size);
-                }
+                do_data_cap();
                 break;
             }
             case WAIT_OBJECT_0 + 1:
@@ -157,49 +203,88 @@ void SpeakerCapSource::cap_routine()
                 worker_run_ = false;
                 break;
             }
+            case WAIT_OBJECT_0 + 2:
+            {
+                handle_dev_change();
+                break;
+            }
             default: break;
         }
+        if (audio_data_client_ == NULL) { break; }
     }
 
-    delete[] silent_frame;
+    dev_enum_->UnregisterEndpointNotificationCallback(this);
 
-    audio_client_->Stop();
-
-    audio_data_client->Release();
+    if (audio_client_) { audio_client_->Stop(); }
+    SafeRelease(audio_data_client_);
 
     CoUninitialize();
 
     return;
 }
 
+void SpeakerCapSource::do_data_cap()
+{
+    HRESULT hr;
+
+    BYTE *data_ptr = NULL;
+    UINT32 data_size = 0;
+    DWORD flags = 0;
+    UINT64 pts = 0;
+    hr = audio_data_client_->GetBuffer(&data_ptr, &data_size, &flags, NULL, &pts);
+    if (SUCCEEDED(hr) && data_size > 0)
+    {
+        bool silent = flags & AUDCLNT_BUFFERFLAGS_SILENT;
+        if (silent)
+        {
+            sink_(silent_frame_, (int)(data_size * single_frame_size_), (pts / 10000), silent);
+        }
+        else
+        {
+            sink_((uint8_t*)data_ptr, (int)(data_size * single_frame_size_), (pts / 10000), silent);
+        }
+        audio_data_client_->ReleaseBuffer(data_size);
+    }
+
+    return;
+}
+
+void SpeakerCapSource::handle_dev_change()
+{
+    audio_client_->Stop();
+    SafeRelease(audio_data_client_);
+    SafeRelease(audio_client_);
+    delete[] silent_frame_; silent_frame_ = NULL;
+
+    IMMDevice *spk_dev = get_speaker_device(NULL);
+    if (spk_dev)
+    {
+        setup(spk_dev);
+        spk_dev->Release();
+
+        audio_client_->Start();
+    }
+
+    return;
+}
+
 IMMDevice* SpeakerCapSource::get_speaker_device(const wchar_t *dev_name)
 {
-    //HRESULT hr;
-
     IMMDevice *dev_selected = NULL;
-
-    IMMDeviceEnumerator *dev_enum = NULL;
-    CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, IID_IMMDeviceEnumerator, (void**)&dev_enum);
-    if (dev_enum == NULL)
-    {
-        return NULL;
-    }
 
     if (dev_name == NULL)
     {
-        dev_enum->GetDefaultAudioEndpoint(eRender, eConsole, &dev_selected);
-        //dev_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &dev_selected);
+        dev_enum_->GetDefaultAudioEndpoint(eRender, eConsole, &dev_selected);
     }
     else
     {
         #if 0
-        dev_enum->GetDevice(dev_id, &dev);
+        dev_enum_->GetDevice(dev_id, &dev);
         #else
         IMMDeviceCollection *dev_collects = NULL;
-        dev_enum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &dev_collects);
+        dev_enum_->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &dev_collects);
         if (dev_collects == NULL)
         {
-            dev_enum->Release();
             return NULL;
         }
 
@@ -235,7 +320,6 @@ IMMDevice* SpeakerCapSource::get_speaker_device(const wchar_t *dev_name)
         dev_collects->Release();
         #endif
     }
-    dev_enum->Release();
 
     return dev_selected;
 }
