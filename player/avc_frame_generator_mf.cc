@@ -298,6 +298,7 @@ IMFSample* AvcFrameGenerator::alloc_output_buffer(int size)
 	IMFSample *sample = NULL;
 	result = MFCreateSample(&sample);
 	sample->AddBuffer(buffer);
+    buffer->Release();
 
 	// TODO: 使用buffer pool
 
@@ -312,16 +313,6 @@ void AvcFrameGenerator::free_output_buffer(IMFSample* sample)
 		return;
 	}
 
-	HRESULT result;
-	DWORD buffer_count = 0;
-	result = sample->GetBufferCount(&buffer_count);
-    DWORD i = 0;
-	for (i = 0; i < buffer_count; ++i)
-	{
-        IMFMediaBuffer* buffer = NULL;
-		result = sample->GetBufferByIndex(i, &buffer);
-		buffer->Release();
-	}
 	sample->Release();
 
 	return;
@@ -330,11 +321,6 @@ void AvcFrameGenerator::free_output_buffer(IMFSample* sample)
 HRESULT AvcFrameGenerator::tryGetEncodeOutput(void)
 {
 	HRESULT result;
-
-	IMFMediaBuffer* buffer = NULL;
-	BYTE *data_ptr = NULL;
-	DWORD max_buffer_len = 0;
-	DWORD current_data_len = 0;
 
 	do
 	{
@@ -375,6 +361,11 @@ HRESULT AvcFrameGenerator::tryGetEncodeOutput(void)
 			result = output_buffer.pSample->GetBufferCount(&buffer_count);
 			for (i = 0; i < buffer_count; ++i)
 			{
+                IMFMediaBuffer* buffer = NULL;
+                BYTE *data_ptr = NULL;
+                DWORD max_buffer_len = 0;
+                DWORD current_data_len = 0;
+
 				result = output_buffer.pSample->GetBufferByIndex(0, &buffer);
 				result = buffer->Lock(&data_ptr, &max_buffer_len, &current_data_len);
 
@@ -383,6 +374,7 @@ HRESULT AvcFrameGenerator::tryGetEncodeOutput(void)
 				frame_size += current_data_len;
 
 				buffer->Unlock();
+                buffer->Release();
 			}
 			frame->frame_len = frame_size;
 			frame_sink_(frame);
@@ -442,6 +434,7 @@ HRESULT AvcFrameGenerator::feedImage(nv12_image_t *image)
 	IMFSample *sample = NULL;
 	result = MFCreateSample(&sample);
 	sample->AddBuffer(buffer);
+    buffer->Release();
 
 	FILETIME now_ft;
 	GetSystemTimeAsFileTime(&now_ft);
@@ -450,6 +443,8 @@ HRESULT AvcFrameGenerator::feedImage(nv12_image_t *image)
 	sample->SetSampleTime(ularg->QuadPart);
 
 	result = video_encoder_->ProcessInput(input_stream_id_, sample, 0);
+    sample->Release();
+
 	if (result == S_OK)
 	{
 		ret = 0;
@@ -457,13 +452,6 @@ HRESULT AvcFrameGenerator::feedImage(nv12_image_t *image)
 	else
 	{
 		printf("video_decoder->ProcessInput() failed, ret: 0x%X\n", result);
-	}
-
-	//if (!mft_hold_input_buffer_)
-	{
-		buffer->Release();
-		sample->RemoveAllBuffers();
-		sample->Release();
 	}
 
     return result;
@@ -509,7 +497,7 @@ void on_frame(Frame* frame)
 int wmain(int argc, wchar_t *argv[])
 {
 	MFStartup(MF_VERSION, 0);
-
+    {
 	frame_fp = fopen("encode.h264", "wb");
 	frame_width_size_fp = fopen("encode_with_size.h264", "wb");
     
@@ -518,11 +506,12 @@ int wmain(int argc, wchar_t *argv[])
     AvcFrameGenerator avc_generator(640, 480, frame_sink);
     avc_generator.start();
     
-    Sleep(3000);
+    getchar();
 
     avc_generator.stop();
     fclose(frame_fp);
 	fclose(frame_width_size_fp);
+    }
 
 	MFShutdown();
     
