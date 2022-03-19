@@ -107,6 +107,14 @@ target_compile_definitions(ut_audio_cap_source_was
     PRIVATE UT_SPEAKER_CAP_SOURCE
 )
 
+set(ut_audio_play_sink_was_SRCS
+    audio_play_sink_was.cc
+)
+add_executable(ut_audio_play_sink_was ${ut_audio_play_sink_was_SRCS})
+target_compile_definitions(ut_audio_play_sink_was
+    PRIVATE UT_AUDIO_PLAY_SINK_WAS
+)
+
 set(ut_audio_play_sink_mf_SRCS
     audio_play_sink_mf.cc
 )
