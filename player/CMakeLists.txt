@@ -99,6 +99,14 @@ target_compile_definitions(ut_speaker_cap_source
     PRIVATE UT_SPEAKER_CAP_SOURCE
 )
 
+set(ut_audio_cap_source_was_SRCS
+    audio_cap_source_was.cc
+)
+add_executable(ut_audio_cap_source_was ${ut_audio_cap_source_was_SRCS})
+target_compile_definitions(ut_audio_cap_source_was
+    PRIVATE UT_SPEAKER_CAP_SOURCE
+)
+
 set(ut_audio_play_sink_mf_SRCS
     audio_play_sink_mf.cc
 )
