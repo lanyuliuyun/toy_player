@@ -1,12 +1,7 @@
-.vs
-.vscode
-build/bin
-build/CMakeFiles
-build/player
-build/x64
-*.vcxproj*
-*.cmake
-CMakeCache.txt
-*.sln
+.vs*
+build/
+bak/
 *.h264
 *.nv12
+*.pcm
+*.aac
