@@ -129,6 +129,18 @@ target_link_libraries(ut_audio_play_sink_mf
     Mfreadwrite.lib
 )
 
+set(ut_aac_encoder_mf_SRCS
+    aac_encoder_mf.cc
+)
+add_executable(ut_aac_encoder_mf ${ut_aac_encoder_mf_SRCS})
+target_compile_definitions(ut_aac_encoder_mf
+    PRIVATE UT_AAC_ENCODER_MF
+)
+target_link_libraries(ut_aac_encoder_mf
+    Mfplat.lib
+    Mfuuid.lib
+)
+
 set(audio_player_SRCS
     audio_cap_source_mf.cc
     audio_play_sink_mf.cc
