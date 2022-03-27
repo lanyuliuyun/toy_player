@@ -76,43 +76,12 @@ public:
         av_audio_fifo_write(audio_queue_, (void**)&sample, sample_count);
     }
 
-    IMFSample* get()
+    int get(int16_t* samples, int max_sample_count)
     {
         std::lock_guard<std::mutex> guard(audio_queue_lock_);
 
-        int sample_count = av_audio_fifo_size(audio_queue_);
-
-        enum { kAudioFrameSampleCount = 960 };
-
-        IMFSample *sample = NULL;
-        MFCreateSample(&sample);
-
-        IMFMediaBuffer *buf = NULL;
-        MFCreateMemoryBuffer((kAudioFrameSampleCount * 2), &buf);
-        BYTE *data = NULL;
-        buf->Lock(&data, NULL, NULL);
-        if (sample_count > kAudioFrameSampleCount)
-        {
-            av_audio_fifo_read(audio_queue_, (void**)&data, kAudioFrameSampleCount);
-        }
-        else
-        {
-            memset(data, 0, (kAudioFrameSampleCount * 2));
-        }
-        buf->Unlock();
-        buf->SetCurrentLength((kAudioFrameSampleCount * 2));
-
-        sample->AddBuffer(buf);
-        buf->Release();
-
-        LONGLONG duration = 10000 * 20;
-        sample->SetSampleDuration(duration);
-        sample->SetSampleFlags(0);
-        sample->SetSampleTime(sample_pts_);
-
-        sample_pts_ += duration;
-
-        return sample;
+        int ret = av_audio_fifo_read(audio_queue_, (void**)&samples, max_sample_count);
+        return ret > 0 ? ret : 0;
     }
 
 private:
@@ -210,7 +179,7 @@ void audio_main(int argc, char *argv[])
     AudioFilter filter;
 
     AudioSampleQueuePlay play_queue;
-    AudioPlayMF play([&play_queue]() -> IMFSample*{ return play_queue.get(); });
+    AudioPlayMF play([&play_queue](int16_t* samples, int max_sample_count) -> int { return play_queue.get(samples, max_sample_count); }, NULL);
 
     AudioCodec codec(48000, 1, [&filter](uint8_t* data, int size, int64_t pts){
         filter.handle_enc_frame(data, size, pts);

@@ -249,7 +249,7 @@ void AudioCapSourceWI::cap_routine()
 
 int main(int argc, char *argv[])
 {
-    FILE *fp = fopen("audio.pcm", "wb");
+    FILE *fp = fopen(argv[1], "wb");
 
     AudioCapSourceWI cap([&fp](int16_t* sample, int sample_count, int64_t pts){
         fwrite(sample, sample_count, sizeof(int16_t), fp);

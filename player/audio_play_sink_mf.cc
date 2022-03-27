@@ -6,10 +6,6 @@
 #include <mmdeviceapi.h>
 #include <Functiondiscoverykeys_devpkey.h>
 
-AudioPlayMF::AudioPlayMF(AudioFrameSource source) : AudioPlayMF(source, NULL)
-{
-}
-
 AudioPlayMF::AudioPlayMF(AudioFrameSource source, const wchar_t *dev_name)
     : play_worker_()
     , worker_run_(false)
@@ -40,12 +36,21 @@ AudioPlayMF::~AudioPlayMF()
     return;
 }
 
+int AudioPlayMF::getSpec(DWORD &sample_bits, DWORD &sample_rate, DWORD &channles)
+{
+    if (stream_sink_ == NULL) { return 0; }
+
+    sample_bits = 16;
+    sample_rate = 48000;
+    channles = 1;
+
+    return 1;
+}
+
 int AudioPlayMF::start()
 {
-    if (stream_sink_ == NULL)
-    {
-        return -1;
-    }
+    if (stream_sink_ == NULL) { return -1; }
+
     worker_run_ = true;
     play_worker_ = std::thread(std::bind(&AudioPlayMF::play_routine, this));
 
@@ -251,11 +256,12 @@ void AudioPlayMF::setup(const wchar_t *dev_name)
 
 void AudioPlayMF::play_routine()
 {
-    HRESULT hr;
+    int frame_size = 48 * 20;
+    LONGLONG sample_pts = 0;
     while (worker_run_)
     {
         IMFMediaEvent *event = NULL;
-        hr = stream_sink_->GetEvent(0, &event);
+        HRESULT hr = stream_sink_->GetEvent(0, &event);
         if (hr != S_OK) { continue; }
 
         MediaEventType event_type;
@@ -264,12 +270,36 @@ void AudioPlayMF::play_routine()
         {
             case MEStreamSinkRequestSample:
             {
-                IMFSample *sample = source_();
-                if (sample != NULL)
+                IMFMediaBuffer *media_buf = NULL;
+                MFCreateMemoryBuffer(frame_size * 2, &media_buf);
+
+                BYTE *data = NULL;
+                DWORD max_len = 0;
+                media_buf->Lock(&data, &max_len, NULL);
+                int ret = source_((int16_t*)data, frame_size);
+                if (ret <= 0)
                 {
-                    stream_sink_->ProcessSample(sample);
-                    sample->Release();
+                    memset(data, 0, (frame_size*2));
                 }
+                media_buf->Unlock();
+                media_buf->SetCurrentLength((DWORD)ret * 2);
+
+                IMFSample *sample = NULL;
+                MFCreateSample(&sample);
+                sample->AddBuffer(media_buf);
+                media_buf->Release();
+
+                LONGLONG duration = (ret / 48) * 10000;
+
+                sample->SetSampleDuration(duration);
+                sample->SetSampleFlags(0);
+                sample->SetSampleTime(sample_pts);
+
+                stream_sink_->ProcessSample(sample);
+                sample->Release();
+
+                sample_pts += duration;
+
                 break;
             }
             case MEStreamSinkPrerolled:
@@ -295,50 +325,16 @@ int main(int argc, char *argv[])
 {
     CoInitializeEx(0, COINIT_MULTITHREADED);
     MFStartup(MF_VERSION);
-
-    int sample_rate = 48000;
-    int channels = 1;
-
-    FILE *fp = fopen(argv[1], "rb");
-    if (fp == NULL)
     {
-        MFShutdown();
-        CoUninitialize();
+    FILE *fp = fopen(argv[1], "rb");
 
-        return 0;
-    }
-
-    int frame_size = channels * 2 * 20 * (sample_rate / 1000);
-
-    LONGLONG sample_pts = 0;
-    auto file_source = [&fp, frame_size, &sample_pts]() -> IMFSample*{
-        if (feof(fp)) { return NULL; }
-
-        IMFSample *sample = NULL;
-        MFCreateSample(&sample);
-        IMFMediaBuffer *media_buf = NULL;
-        MFCreateMemoryBuffer(frame_size, &media_buf);
-
-        BYTE *data = NULL;
-        DWORD max_len = 0;
-        media_buf->Lock(&data, &max_len, NULL);
-        size_t size = fread(data, 1, max_len, fp);
-        media_buf->Unlock();
-        media_buf->SetCurrentLength((DWORD)size);
-        sample->AddBuffer(media_buf);
-        media_buf->Release();
-
-        LONGLONG duration = 20 * 10000;
-        sample->SetSampleDuration(duration);
-        sample->SetSampleFlags(0);
-        sample->SetSampleTime(sample_pts);
-
-        sample_pts += duration;
-
-        return sample;
+    auto file_source = [&fp](int16_t* samples, int max_sample_count) -> int{
+        if (feof(fp)) { return 0; }
+        int size = (int)fread(samples, 2, max_sample_count, fp);
+        return size;
     };
 
-    AudioPlayMF play(file_source);
+    AudioPlayMF play(file_source, NULL);
 
     play.start();
 
@@ -347,7 +343,7 @@ int main(int argc, char *argv[])
     play.stop();
 
     fclose(fp);
-
+    }
     MFShutdown();
     CoUninitialize();
 

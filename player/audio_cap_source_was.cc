@@ -327,12 +327,13 @@ IMMDevice* AudioCapSourceWAS::get_audioin_device(const wchar_t *dev_name)
 #if defined(UT_SPEAKER_CAP_SOURCE)
 
 #include <stdio.h>
+#include <inttypes.h>
 
 int main(int argc, char *argv[])
 {
-    FILE *fp = fopen("audio_mic.pcm", "wb");
+    FILE *fp = fopen(argv[1], "wb");
 
-    AudioCapSourceWAS cap([&fp](uint8_t* sample_data, int sample_data_size, int64_t pts, bool silent){
+    AudioCapSourceWAS cap([&fp](uint8_t* sample_data, int sample_data_size, int64_t pts, bool silent) {
         //printf("audio-frame, data_size: %d, pts: %" PRId64 "ms\n", sample_data_size, pts);
         fwrite(sample_data, sample_data_size, 1, fp);
     }, NULL);

@@ -11,12 +11,11 @@
 class AudioPlayMF
 {
 public:
-    typedef std::function<IMFSample*()> AudioFrameSource;
-
-    AudioPlayMF(AudioFrameSource source);
-    explicit AudioPlayMF(AudioFrameSource source, const wchar_t *dev_name);
-
+    typedef std::function<int(int16_t* samples, int max_sample_count)> AudioFrameSource;
+    AudioPlayMF(AudioFrameSource source, const wchar_t *dev_name);
     ~AudioPlayMF();
+
+    int getSpec(DWORD &sample_bits, DWORD &sample_rate, DWORD &channles);
 
     int start();
     void stop();

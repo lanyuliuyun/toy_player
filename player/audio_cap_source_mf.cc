@@ -246,10 +246,6 @@ int main(int argc, char *argv[])
 
     FILE *fp = fopen(argv[1], "wb");
     AudioCapSourceMF *cap = new AudioCapSourceMF([&fp](int16_t* sample, int sample_count, int64_t pts){
-      #if 1
-        printf("Audio Frame, sample_count: %d, pts: %" PRId64 "ms\n", sample_count, pts);
-      #endif
-
         fwrite(sample, sample_count, sizeof(int16_t), fp);
     }, NULL);
 

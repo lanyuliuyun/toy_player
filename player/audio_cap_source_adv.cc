@@ -348,7 +348,7 @@ int main(int argc, char *argv[])
 {
     CoInitializeEx(0, COINIT_MULTITHREADED);
 
-    FILE *fp = fopen("audio.pcm", "wb");
+    FILE *fp = fopen(argv[1], "wb");
     {
     AudioCapSourceAdv cap([&fp](int16_t* sample, int sample_count, int64_t pts){
         fwrite(sample, sample_count, sizeof(int16_t), fp);
